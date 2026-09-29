@@ -1,5 +1,5 @@
 // Keeps the app shell available offline. Bump VERSION after changing any cached file.
-const VERSION = 'camsim-v3';
+const VERSION = 'camsim-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

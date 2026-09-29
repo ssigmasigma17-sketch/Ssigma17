@@ -54,7 +54,7 @@ svg { display: block; }
 .app.video .vf { top: var(--vTop); height: var(--vH); }
 .media { position: absolute; inset: 0; transform: scale(var(--zs, 1)); transition: transform .32s cubic-bezier(.3,.7,.2,1), filter .3s; }
 .media.switching { filter: blur(22px); }
-.media video, .media canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.media video, .media canvas, .media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .gridlines { position: absolute; inset: 0; pointer-events: none; }
 .gridlines i { position: absolute; background: rgba(255,255,255,.35); }
 .blink { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
@@ -217,6 +217,7 @@ svg { display: block; }
     <div class="media" id="media">
       <canvas id="demo" width="540" height="960"></canvas>
       <video id="feed" playsinline webkit-playsinline muted autoplay preload="auto" hidden></video>
+      <img id="still" alt="" hidden>
     </div>
     <div class="gridlines" id="grid" hidden><i style="left:33.333%;top:0;bottom:0;width:1px"></i><i style="left:66.666%;top:0;bottom:0;width:1px"></i><i style="top:33.333%;left:0;right:0;height:1px"></i><i style="top:66.666%;left:0;right:0;height:1px"></i></div>
     <div class="focus" id="focus"><span class="track"></span>
@@ -284,7 +285,7 @@ svg { display: block; }
 
     <div class="sec">
       <h3>Задняя камера <button type="button" data-reset="back">Сбросить</button></h3>
-      <p class="sub">Играет вместо изображения с камеры, когда вы её открываете. Нажмите на ролик, чтобы выбрать его.</p>
+      <p class="sub">Видео или фото показывается вместо изображения с камеры. Нажмите на ролик или фото, чтобы выбрать его.</p>
       <div class="tiles" id="tiles-back"></div>
     </div>
 
@@ -332,7 +333,7 @@ svg { display: block; }
   <div class="strip" id="vStrip"></div>
 </div>
 
-<input type="file" id="filePick" accept="video/*" multiple hidden>
+<input type="file" id="filePick" accept="video/*,image/*" multiple hidden>
 <input type="file" id="imgPick" accept="image/*" hidden>
 
 <script>
@@ -340,7 +341,8 @@ svg { display: block; }
 'use strict';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const app = $('app'), vf = $('vf'), media = $('media'), feed = $('feed'), demo = $('demo');
+const app = $('app'), vf = $('vf'), media = $('media'), feed = $('feed'), demo = $('demo'), still = $('still');
+const isImage = f => !!f && (f.img || (f.blob && /^image\//.test(f.blob.type || '')));
 
 // ---------- text ----------
 const TEXT = {
@@ -453,6 +455,7 @@ function drawDemo(t) {
 }
 
 // ---------- source selection ----------
+const srcEl = () => useDemo ? demo : (!still.hidden && still.naturalWidth ? still : feed);
 let curId = null, curURL = null, useDemo = true;
 function pickId() {
   if (R.cam === 'front' && S.frontId && FILES.has(S.frontId)) return S.frontId;
@@ -465,17 +468,18 @@ function applySource() {
       if (curURL) URL.revokeObjectURL(curURL);
       curURL = URL.createObjectURL(FILES.get(id).blob);
       curId = id;
-      feed.src = curURL;
-      feed.load();
+      if (isImage(FILES.get(id))) { still.src = curURL; feed.removeAttribute('src'); feed.load(); }
+      else { still.removeAttribute('src'); feed.src = curURL; feed.load(); }
     }
-    feed.loop = S.loop;
-    feed.hidden = false; demo.hidden = true; useDemo = false;
-    feed.play().catch(() => {});
+    const img = isImage(FILES.get(id));
+    demo.hidden = true; useDemo = false;
+    still.hidden = !img; feed.hidden = img;
+    if (!img) { feed.loop = S.loop; feed.play().catch(() => {}); }
   } else {
     if (curURL) { URL.revokeObjectURL(curURL); curURL = null; }
-    if (curId) { feed.removeAttribute('src'); feed.load(); }
+    if (curId) { feed.removeAttribute('src'); feed.load(); still.removeAttribute('src'); }
     curId = null;
-    feed.hidden = true; demo.hidden = false; useDemo = true;
+    feed.hidden = true; still.hidden = true; demo.hidden = false; useDemo = true;
   }
   updateHint();
 }
@@ -510,7 +514,7 @@ function loop(ts) {
   if (!document.hidden) {
     if (useDemo) drawDemo(ts / 1000);
     if (R.mode === 'photo' && (frameN++ % 4 === 0)) {
-      try { if (useDemo || feed.readyState >= 2) bctx.drawImage(useDemo ? demo : feed, 0, 0, bg.width, bg.height); } catch (e) {}
+      try { const el = srcEl(); if (el && (el !== feed || feed.readyState >= 2)) bctx.drawImage(el, 0, 0, bg.width, bg.height); } catch (e) {}
     }
   }
   requestAnimationFrame(loop);
@@ -621,8 +625,9 @@ function beep(freq, dur = .12) {
 
 // ---------- capture ----------
 function grab(maxSide = 1600) {
-  const src = useDemo ? demo : feed;
-  const sw = useDemo ? demo.width : feed.videoWidth, sh = useDemo ? demo.height : feed.videoHeight;
+  const src = srcEl();
+  const sw = src === demo ? demo.width : src === still ? still.naturalWidth : feed.videoWidth;
+  const sh = src === demo ? demo.height : src === still ? still.naturalHeight : feed.videoHeight;
   if (!sw || !sh) return null;
   const r = vf.getBoundingClientRect();
   if (!r.width || !r.height) return null;
@@ -943,8 +948,9 @@ $('filePick').addEventListener('change', async e => {
   for (const file of files) {
     const rec = { id: newId(), kind, blob: file, thumb: '', dur: 0, added: Date.now(), busy: true };
     FILES.set(rec.id, rec); renderTiles();
-    Object.assign(rec, await videoInfo(file)); delete rec.busy;
-    try { await idb('readwrite', s => s.put({ id: rec.id, kind, blob: file, thumb: rec.thumb, dur: rec.dur, added: rec.added })); } catch (err) {}
+    if (/^image\//.test(file.type)) { rec.img = true; rec.thumb = await imageThumb(file); } else Object.assign(rec, await videoInfo(file));
+    delete rec.busy;
+    try { await idb('readwrite', s => s.put({ id: rec.id, kind, blob: file, thumb: rec.thumb, dur: rec.dur, added: rec.added, img: !!rec.img })); } catch (err) {}
     if (kind === 'back') S.backId = rec.id; else S.frontId = rec.id;
     save(); renderTiles(); applySource();
   }
