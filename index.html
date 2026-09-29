@@ -100,7 +100,7 @@ svg { display: block; }
 .more b { font-weight: 500; color: var(--yellow); }
 
 /* zoom */
-.zoom { position: absolute; left: 50%; top: var(--zP); transform: translate(-50%, -50%); display: flex; gap: 6px; z-index: 2; transition: top .38s cubic-bezier(.3,.7,.2,1); }
+.zoom { touch-action: none; position: absolute; left: 50%; top: var(--zP); transform: translate(-50%, -50%); display: flex; gap: 6px; z-index: 2; transition: top .38s cubic-bezier(.3,.7,.2,1); }
 .app.video .zoom { top: var(--zV); }
 .zoom button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-shadow: 0 0 4px rgba(0,0,0,.35); transition: transform .2s, background .2s; }
 .zoom button.on { color: var(--yellow); background: rgba(22,22,24,.55); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); text-shadow: none; transform: scale(1.06); }
@@ -194,7 +194,8 @@ svg { display: block; }
 .viewer .vt span { font-size: 15px; font-weight: 600; text-align: center; }
 .viewer .vt span small { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .viewer .vm { position: relative; min-height: 0; overflow: hidden; touch-action: pan-y; }
-.viewer .vm img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.viewer .vm video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.viewer .vm img { -webkit-touch-callout: default; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .viewer .vm .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(0,0,0,.45); display: grid; place-items: center; }
 .viewer .strip { display: flex; gap: 2px; justify-content: center; padding: 10px 8px 14px; overflow-x: auto; }
 .viewer .strip button { flex: none; width: 34px; height: 46px; opacity: .6; }
@@ -327,9 +328,10 @@ svg { display: block; }
 <div class="viewer" id="viewer" hidden>
   <div class="vt">
     <button type="button" id="vBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4 7 12l8 8"/></svg></button>
-    <span id="vTitle"></span><span></span>
+    <span id="vTitle"></span>
+    <button type="button" id="vShare" aria-label="Share" style="justify-self:end"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7.5 7.5 12 3l4.5 4.5"/><path d="M6.5 11H5v10h14V11h-1.5"/></svg></button>
   </div>
-  <div class="vm" id="vMain"><img id="vImg" alt=""><span class="play" id="vPlay" hidden><svg viewBox="0 0 24 24" width="26" height="26" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></div>
+  <div class="vm" id="vMain"><img id="vImg" alt=""><video id="vVid" playsinline webkit-playsinline controls hidden></video><span class="play" id="vPlay" hidden><svg viewBox="0 0 24 24" width="26" height="26" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></div>
   <div class="strip" id="vStrip"></div>
 </div>
 
@@ -513,6 +515,7 @@ let frameN = 0;
 function loop(ts) {
   if (!document.hidden) {
     if (useDemo) drawDemo(ts / 1000);
+    if (R.recording) drawClipFrame();
     if (R.mode === 'photo' && (frameN++ % 4 === 0)) {
       try { const el = srcEl(); if (el && (el !== feed || feed.readyState >= 2)) bctx.drawImage(el, 0, 0, bg.width, bg.height); } catch (e) {}
     }
@@ -539,7 +542,23 @@ function applyZoom() {
     b.setAttribute('aria-label', `${numFmt.format(PRESETS[i])}×`);
   });
 }
+// slide a finger across the zoom buttons for smooth zoom
+let zDrag = null, zDragged = false;
+$('zoom').addEventListener('pointerdown', e => { zDrag = { x: e.clientX, z0: R.zoom, on: false }; zDragged = false; $('zoom').setPointerCapture(e.pointerId); });
+$('zoom').addEventListener('pointermove', e => {
+  if (!zDrag) return;
+  const dx = e.clientX - zDrag.x;
+  if (!zDrag.on && Math.abs(dx) > 8) { zDrag.on = true; zDragged = true; media.style.transition = 'none'; }
+  if (zDrag.on) {
+    const z = clamp(zDrag.z0 * 2 ** (dx / 90), .5, 10);
+    if ((z < 1) !== (R.zoom < 1)) lensSwitch();
+    R.zoom = z; applyZoom();
+  }
+});
+const zEnd = () => { if (zDrag && zDrag.on) media.style.transition = ''; zDrag = null; };
+$('zoom').addEventListener('pointerup', zEnd); $('zoom').addEventListener('pointercancel', zEnd);
 $('zoom').addEventListener('click', e => {
+  if (zDragged) { zDragged = false; return; }
   const b = e.target.closest('button'); if (!b) return;
   const z = +b.dataset.z;
   if (Math.abs(z - R.zoom) < .01) return;
@@ -624,28 +643,38 @@ function beep(freq, dur = .12) {
 }
 
 // ---------- capture ----------
-function grab(maxSide = 1600) {
+// Draws exactly what the viewfinder shows (crop, zoom, exposure) into a canvas context.
+function drawView(x, cw, ch) {
   const src = srcEl();
   const sw = src === demo ? demo.width : src === still ? still.naturalWidth : feed.videoWidth;
   const sh = src === demo ? demo.height : src === still ? still.naturalHeight : feed.videoHeight;
-  if (!sw || !sh) return null;
+  if (!sw || !sh) return false;
+  const s = Math.max(cw / sw, ch / sh) * zoomScale();
+  x.filter = R.exposure ? `brightness(${(1 + R.exposure * .6).toFixed(2)})` : 'none';
+  x.drawImage(src, (cw - sw * s) / 2, (ch - sh * s) / 2, sw * s, sh * s);
+  x.filter = 'none';
+  return true;
+}
+function viewSize(maxSide) {
   const r = vf.getBoundingClientRect();
   if (!r.width || !r.height) return null;
   const k = Math.min(3, maxSide / Math.max(r.width, r.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(r.width * k); c.height = Math.round(r.height * k);
-  const x = c.getContext('2d');
-  const s = Math.max(c.width / sw, c.height / sh) * zoomScale();
-  if (R.exposure) x.filter = `brightness(${(1 + R.exposure * .6).toFixed(2)})`;
-  x.drawImage(src, (c.width - sw * s) / 2, (c.height - sh * s) / 2, sw * s, sh * s);
-  return c;
+  return [Math.round(r.width * k / 2) * 2, Math.round(r.height * k / 2) * 2];
 }
-function toURL(c) { return new Promise(res => c.toBlob(b => res(b ? URL.createObjectURL(b) : c.toDataURL('image/jpeg', .9)), 'image/jpeg', .9)); }
+function grab(maxSide = 1600) {
+  const sz = viewSize(maxSide); if (!sz) return null;
+  const c = document.createElement('canvas');
+  [c.width, c.height] = sz;
+  return drawView(c.getContext('2d'), c.width, c.height) ? c : null;
+}
+const toBlob = c => new Promise(res => c.toBlob(res, 'image/jpeg', .92));
 async function addShot(kind, dur = 0) {
-  const c = grab(); if (!c) return;
-  const url = await toURL(c);
-  R.shots.unshift({ url, kind, dur, at: new Date() });
-  setThumb(url, true);
+  const c = grab(); if (!c) return null;
+  const blob = await toBlob(c);
+  const shot = { url: blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', .9), blob, kind, dur, at: new Date() };
+  R.shots.unshift(shot);
+  setThumb(shot.url, true);
+  return shot;
 }
 function setThumb(src, animate) {
   const img = $('thumbImg'); img.src = src || ''; img.hidden = !src;
@@ -669,7 +698,27 @@ async function takePhoto() {
 let recTick = 0;
 const fmtClock = ms => { const s = Math.floor(ms / 1000); return [s / 3600 | 0, (s / 60 | 0) % 60, s % 60].map(v => String(v).padStart(2, '0')).join(':'); };
 function recElapsed() { return R.recAcc + (R.paused ? 0 : Date.now() - R.recFrom); }
+// The clip is recorded from what the viewfinder shows, so it plays back in the gallery.
+let rec = null, recCanvas = null, recCtx = null, recChunks = [], recMime = '';
+function beginClip() {
+  rec = null;
+  try {
+    const sz = viewSize(1280); if (!sz || !window.MediaRecorder) return;
+    recCanvas = document.createElement('canvas'); [recCanvas.width, recCanvas.height] = sz;
+    recCtx = recCanvas.getContext('2d');
+    drawView(recCtx, recCanvas.width, recCanvas.height);
+    if (!recCanvas.captureStream) return;
+    recMime = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
+    const stream = recCanvas.captureStream(30);
+    rec = new MediaRecorder(stream, recMime ? { mimeType: recMime, videoBitsPerSecond: 8e6 } : { videoBitsPerSecond: 8e6 });
+    recChunks = [];
+    rec.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+    rec.start(500);
+  } catch (e) { rec = null; }
+}
+function drawClipFrame() { if (rec && recCtx && !R.paused) drawView(recCtx, recCanvas.width, recCanvas.height); }
 function startRec() {
+  beginClip();
   R.recording = true; R.paused = false; R.recAcc = 0; R.recFrom = Date.now();
   app.classList.add('recording'); closeMore();
   $('shutter').setAttribute('aria-label', 'Stop recording');
@@ -685,7 +734,16 @@ function stopRec() {
   app.classList.remove('recording');
   $('shutter').setAttribute('aria-label', 'Record video');
   beep(990, .1);
-  addShot('video', dur);
+  const r = rec; rec = null;
+  addShot('video', dur).then(shot => {
+    if (!shot || !r) return;
+    r.onstop = () => {
+      const type = r.mimeType || recMime || 'video/mp4';
+      shot.blob = new Blob(recChunks, { type }); shot.video = URL.createObjectURL(shot.blob); shot.type = type;
+      if (!$('viewer').hidden && vIdx === 0) openViewer(0);
+    };
+    try { r.stop(); } catch (e) {}
+  });
 }
 function setPauseIcon() {
   $('pauseIco').innerHTML = R.paused
@@ -695,7 +753,8 @@ function setPauseIcon() {
 }
 $('pauseBtn').addEventListener('click', () => {
   if (!R.recording) return;
-  if (R.paused) { R.paused = false; R.recFrom = Date.now(); } else { R.recAcc += Date.now() - R.recFrom; R.paused = true; }
+  if (R.paused) { R.paused = false; R.recFrom = Date.now(); try { rec && rec.resume(); } catch (e) {} }
+  else { R.recAcc += Date.now() - R.recFrom; R.paused = true; try { rec && rec.pause(); } catch (e) {} }
   setPauseIcon();
 });
 $('stillBtn').addEventListener('click', () => { if (R.recording) { click([0], .35); blink(); addShot('photo'); } });
@@ -818,7 +877,7 @@ onHold($('topZone'), openSheet);
 onHold($('ctrlPill'), openSheet, 600);
 onHold($('fmtPill'), openSheet, 600);
 addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, { capture: true });
-addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('contextmenu', e => { if (!e.target.closest('#viewer')) e.preventDefault(); });
 
 // ---------- settings sheet ----------
 function openSheet() {
@@ -973,25 +1032,40 @@ function refreshThumb() {
 }
 
 // ---------- photo viewer ----------
-let vIdx = 0, gpURL = null;
+let vIdx = 0, gpURL = null, curItem = null;
 function viewItems() {
-  const items = R.shots.map(s => ({ src: s.url, kind: s.kind, at: s.at }));
+  const items = R.shots.map(s => ({ src: s.url, kind: s.kind, at: s.at, video: s.video, blob: s.blob, type: s.type }));
   const gp = galleryPhoto();
-  if (gp) { if (!gpURL) gpURL = URL.createObjectURL(gp.blob); items.push({ src: gpURL, kind: 'photo', at: new Date(gp.added) }); }
+  if (gp) { if (!gpURL) gpURL = URL.createObjectURL(gp.blob); items.push({ src: gpURL, kind: 'photo', at: new Date(gp.added), blob: gp.blob }); }
   return items;
 }
 function openViewer(i) {
   const items = viewItems(); if (!items.length) return;
   vIdx = clamp(i, 0, items.length - 1);
   const it = items[vIdx], t = T();
-  $('vImg').src = it.src; $('vPlay').hidden = it.kind !== 'video';
+  const vv = $('vVid');
+  if (it.video) { vv.hidden = false; $('vImg').hidden = true; $('vPlay').hidden = true; if (vv.src !== it.video) { vv.src = it.video; vv.poster = it.src; } }
+  else { vv.pause(); vv.hidden = true; vv.removeAttribute('src'); $('vImg').hidden = false; $('vImg').src = it.src; $('vPlay').hidden = it.kind !== 'video'; }
+  curItem = it;
+  $('vShare').style.visibility = it.blob && navigator.share ? 'visible' : 'hidden';
   const time = it.at.toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
   $('vTitle').innerHTML = `${t.today}<small>${time}</small>`;
   $('vStrip').innerHTML = items.map((x, k) => `<button type="button" class="${k === vIdx ? 'on' : ''}" data-i="${k}"><img src="${x.src}" alt=""></button>`).join('');
   $('viewer').hidden = false;
 }
 $('thumb').addEventListener('click', () => { if (!R.recording) { if (gpURL) { URL.revokeObjectURL(gpURL); gpURL = null; } openViewer(0); } });
-$('vBack').addEventListener('click', () => { $('viewer').hidden = true; });
+$('vBack').addEventListener('click', () => { $('vVid').pause(); $('viewer').hidden = true; });
+// Share sheet has "Save Image" / "Save Video" on iPhone
+$('vShare').addEventListener('click', async () => {
+  const it = curItem; if (!it || !it.blob) return;
+  const isVid = !!it.video;
+  const ext = isVid ? ((it.type || '').includes('webm') ? 'webm' : 'mp4') : 'jpg';
+  const file = new File([it.blob], `IMG_${String(Date.now()).slice(-4)}.${ext}`, { type: it.blob.type || (isVid ? 'video/mp4' : 'image/jpeg') });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file] });
+    else await navigator.share({ url: URL.createObjectURL(file) });
+  } catch (e) {}
+});
 $('vStrip').addEventListener('click', e => { const b = e.target.closest('button'); if (b) openViewer(+b.dataset.i); });
 (() => {
   let x0 = null;
@@ -999,9 +1073,18 @@ $('vStrip').addEventListener('click', e => { const b = e.target.closest('button'
   $('vMain').addEventListener('pointerup', e => { if (x0 === null) return; const d = e.clientX - x0; x0 = null; if (Math.abs(d) > 40) openViewer(vIdx + (d < 0 ? 1 : -1)); });
 })();
 
+// ---------- keep the screen on while the camera is open ----------
+let wakeLock = null;
+async function keepAwake() {
+  if (wakeLock || !('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } catch (e) {}
+}
+document.addEventListener('visibilitychange', keepAwake);
+addEventListener('pointerdown', keepAwake, { passive: true });
+
 // ---------- boot ----------
 async function boot() {
-  layout(); applyZoom(); applyText();
+  layout(); applyZoom(); applyText(); keepAwake();
   requestAnimationFrame(loop);
   try {
     const all = await idb('readonly', s => s.getAll());
