@@ -1,813 +1,1005 @@
-<title>Симулятор камеры</title>
-<meta name="description" content="Симулятор камеры телефона: зум, режимы, выдержка, диафрагма, ISO, фокус касанием и галерея снимков.">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Camera">
+<meta name="theme-color" content="#000000">
+<meta name="description" content="A camera screen that plays your own video where the live view would be.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Camera</title>
 <style>
-/* Layout: one phone-sized camera screen — top bar, 3:4 viewfinder with overlaid controls, mode carousel, shutter row. Single dark look by choice. */
 :root {
   --bg: #000;
   --fg: #fff;
-  --dim: rgba(255,255,255,.62);
-  --glass: rgba(28,28,30,.62);
-  --glass-2: rgba(58,58,62,.78);
-  --accent: #ffd426;
-  --warn: #ff9f43;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --yellow: #ffd60a;
+  --red: #ff3b30;
+  --glass: rgba(34, 34, 36, .46);
+  --chip: rgba(28, 28, 30, .92);
+  --sheet: #1c1c1e;
+  --cell: #2c2c2e;
+  --sep: rgba(255, 255, 255, .1);
+  --muted: rgba(235, 235, 245, .6);
+  --accent: #b59dff;
+  --green: #34c759;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
   color-scheme: dark;
+  --st: 0px; --pTop: 64px; --pH: 520px; --vTop: 0px; --vH: 700px; --shY: 700px; --rowY: 800px; --zP: 610px; --zV: 610px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
-html, body { background: var(--bg); color: var(--fg); height: 100%; }
-body { margin: 0; font-family: var(--font); font-size: 15px; padding-inline: 16px; padding-block: 12px; display: grid; place-items: start center; overflow-x: hidden; }
-button { font-family: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; overscroll-behavior: none; }
+body { font-family: var(--font); -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+svg { display: block; }
 
-.phone { width: min(430px, 100%, max(300px, calc((100dvh - 250px) * .75))); display: grid; user-select: none; -webkit-user-select: none; }
+.app { position: fixed; top: 0; bottom: 0; left: 50%; width: 100%; max-width: 440px; transform: translateX(-50%); overflow: hidden; background: #000;
+  transition: transform .38s cubic-bezier(.2,.8,.2,1), border-radius .38s; }
+.app.sheet-open { transform: translateX(-50%) scale(.93) translateY(12px); border-radius: 14px; }
+.probe { position: absolute; visibility: hidden; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 
-/* top bar */
-.top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 46px; }
-.icon-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--glass-2); }
-.icon-btn svg { width: 20px; height: 20px; }
-.icon-btn.on { background: var(--accent); color: #000; }
-.chev { justify-self: center; width: 36px; height: 26px; border-radius: 13px; display: grid; place-items: center; }
-.chev svg { width: 22px; height: 12px; transition: transform .25s; }
-.chev[aria-expanded="true"] svg { transform: rotate(180deg); }
-.chev[aria-expanded="true"] { background: var(--glass-2); }
-.top .right { justify-self: end; }
-
-.readout { display: flex; justify-content: center; gap: 12px; font-family: var(--mono); font-size: 12px; color: var(--dim); height: 22px; align-items: center; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
-.readout .meter { color: var(--fg); }
-.readout .meter.bad { color: var(--warn); }
-.readout .auto { color: var(--accent); }
+/* blurred surround in photo mode */
+#bg { position: absolute; left: -40px; top: -40px; width: calc(100% + 80px); height: calc(100% + 80px); filter: blur(28px) brightness(.42) saturate(1.3); transition: opacity .35s; }
+.app.video #bg { opacity: 0; }
 
 /* viewfinder */
-.vf { position: relative; aspect-ratio: 3 / 4; width: 100%; max-width: 100%; overflow: hidden; background: #111; touch-action: none; cursor: crosshair; }
-.vf canvas#view { display: block; width: 100%; height: 100%; }
+.vf { position: absolute; left: 0; right: 0; top: var(--pTop); height: var(--pH); overflow: hidden; background: #000; touch-action: none;
+  transition: top .38s cubic-bezier(.3,.7,.2,1), height .38s cubic-bezier(.3,.7,.2,1); }
+.app.video .vf { top: var(--vTop); height: var(--vH); }
+.media { position: absolute; inset: 0; transform: scale(var(--zs, 1)); transition: transform .32s cubic-bezier(.3,.7,.2,1), filter .3s; }
+.media.switching { filter: blur(22px); }
+.media video, .media canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .gridlines { position: absolute; inset: 0; pointer-events: none; }
-.gridlines i { position: absolute; background: rgba(255,255,255,.28); }
-.af { position: absolute; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 1.5px solid var(--accent); pointer-events: none; transition: opacity .6s; }
-.af.dim { opacity: .35; }
-.af.pop { animation: afpop .35s ease-out; }
-@keyframes afpop { 0% { transform: translate(-50%, -50%) scale(1.35); } 100% { transform: translate(-50%, -50%) scale(1); } }
-.af .sunline { position: absolute; right: -18px; top: 0; bottom: 0; width: 1.5px; background: var(--accent); opacity: .7; }
-.af .sun { position: absolute; right: -26px; width: 17px; height: 17px; margin-top: -8px; color: var(--accent); }
-.af .tag { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); background: var(--accent); color: #000; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--fg); font-size: 12.5px; line-height: 1.3; padding: 6px 12px; border-radius: 14px; text-align: center; pointer-events: none; }
-.hint b { color: var(--warn); font-weight: 600; }
-.histo { position: absolute; top: 48px; left: 10px; width: 30%; height: auto; aspect-ratio: 2 / 1; background: var(--glass); border-radius: 8px; pointer-events: none; }
-.blackout { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
-.blackout.go { animation: blink .22s ease-out; }
+.gridlines i { position: absolute; background: rgba(255,255,255,.35); }
+.blink { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+.blink.go { animation: blink .2s ease-out; }
 @keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }
+.focus { position: absolute; width: 76px; height: 76px; margin: -38px 0 0 -38px; border: 1px solid var(--yellow); opacity: 0; pointer-events: none; transition: opacity .5s; }
+.focus::before, .focus::after { content: ""; position: absolute; background: var(--yellow); }
+.focus::before { left: 50%; top: -1px; width: 1px; height: 6px; box-shadow: 0 69px 0 var(--yellow); }
+.focus::after { top: 50%; left: -1px; height: 1px; width: 6px; box-shadow: 69px 0 0 var(--yellow); }
+.focus.on { opacity: 1; }
+.focus.dim { opacity: .45; }
+.focus.pop { animation: fpop .45s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes fpop { 0% { transform: scale(1.5); } 60% { transform: scale(.95); } 100% { transform: scale(1); } }
+.focus .sun { position: absolute; right: -31px; top: 50%; width: 20px; height: 20px; margin-top: -10px; color: var(--yellow); }
+.focus .track { position: absolute; right: -22px; top: -20px; bottom: -20px; width: 1px; background: var(--yellow); opacity: 0; transition: opacity .2s; }
+.focus.adjusting .track { opacity: .8; }
+.lockTag { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--yellow); color: #000; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 3px 7px; border-radius: 4px; pointer-events: none; white-space: nowrap; }
+.countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 120px; font-weight: 200; color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,.35); pointer-events: none; font-variant-numeric: tabular-nums; }
+.hint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); text-align: center; background: var(--glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font-size: 13px; line-height: 1.3; padding: 7px 12px; border-radius: 16px; pointer-events: none; }
 
-.overlay { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 10px; padding-block: 28px 12px; background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0)); cursor: default; }
-.zoom { justify-self: center; display: flex; gap: 6px; background: rgba(0,0,0,.32); padding: 4px; border-radius: 22px; }
-.zoom button { width: 32px; height: 32px; border-radius: 50%; background: var(--glass-2); font-size: 11px; font-weight: 600; display: grid; place-items: center; transition: transform .15s; }
-.zoom button.on { color: var(--accent); transform: scale(1.18); font-size: 12px; }
+/* top pills */
+.pill { position: absolute; top: calc(var(--st) + 14px); height: 38px; border-radius: 19px; display: flex; align-items: center; background: var(--glass); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6); transition: opacity .25s; z-index: 3; }
+.pill button { height: 38px; min-width: 40px; display: grid; place-items: center; }
+.pill svg { width: 21px; height: 21px; }
+.pill.right { right: 14px; padding: 0 5px; }
+.pill.left { left: 14px; padding: 0 8px; gap: 2px; }
+.pill.left button { font-size: 15px; font-weight: 600; letter-spacing: -.01em; padding: 0 5px; min-width: 0; display: flex; align-items: center; }
+.pill.left sup { font-size: 7.5px; font-weight: 600; margin: -7px 0 0 2px; opacity: .72; letter-spacing: .02em; }
+.pill .on { color: var(--yellow); }
+.app.photo #fmtPill { opacity: 0; pointer-events: none; }
+.app.video #liveBtn { display: none; }
+.app.recording .pill { opacity: 0; pointer-events: none; }
+.recTimer { position: absolute; top: calc(var(--st) + 22px); left: 50%; transform: translateX(-50%); background: var(--red); color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: .02em; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 3; }
+.app.recording .recTimer { opacity: 1; }
 
-.tools { display: flex; gap: 6px; overflow-x: auto; padding-inline: 12px; scrollbar-width: none; }
-.tools::-webkit-scrollbar { display: none; }
-.tool { flex: none; display: grid; justify-items: center; gap: 4px; width: 54px; }
-.tool .ring { width: 38px; height: 38px; border-radius: 50%; background: var(--glass-2); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
-.tool span { font-size: 10px; color: var(--dim); white-space: nowrap; }
-.tool[aria-pressed="true"] .ring { background: var(--fg); color: #000; }
-.tool.on .ring { color: var(--accent); }
-.tool[aria-pressed="true"].on .ring { background: var(--accent); color: #000; }
+.more { position: absolute; top: calc(var(--st) + 60px); right: 14px; width: 220px; padding: 6px; border-radius: 18px; background: rgba(40,40,42,.72); -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6); z-index: 4; display: grid; gap: 2px; transform-origin: top right; animation: pop .22s cubic-bezier(.2,.9,.3,1.1); }
+@keyframes pop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.more button { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 12px; font-size: 15px; }
+.more button:active { background: rgba(255,255,255,.1); }
+.more b { font-weight: 500; color: var(--yellow); }
 
-.dial { display: grid; gap: 6px; }
-.dial-label { text-align: center; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
-.dial-label b { color: var(--accent); font-family: var(--mono); letter-spacing: 0; margin-left: 6px; text-transform: none; }
-.dial-label em { font-style: normal; color: var(--fg); margin-left: 6px; letter-spacing: 0; text-transform: none; font-weight: 500; }
-.ruler { position: relative; height: 40px; overflow: hidden; cursor: ew-resize; touch-action: none;
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); }
-.ruler.off { opacity: .4; cursor: not-allowed; }
-.track { position: absolute; left: 50%; top: 0; height: 100%; will-change: transform; }
-.tick { position: absolute; top: 4px; width: 1.5px; height: 12px; background: rgba(255,255,255,.55); transform: translateX(-50%); }
-.tick.major { height: 18px; background: #fff; }
-.tick b { position: absolute; top: 21px; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 500; white-space: nowrap; font-family: var(--mono); color: var(--dim); }
-.needle { position: absolute; left: 50%; top: 0; width: 2px; height: 22px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
+/* zoom */
+.zoom { position: absolute; left: 50%; top: var(--zP); transform: translate(-50%, -50%); display: flex; gap: 6px; z-index: 2; transition: top .38s cubic-bezier(.3,.7,.2,1); }
+.app.video .zoom { top: var(--zV); }
+.zoom button { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-shadow: 0 0 4px rgba(0,0,0,.35); transition: transform .2s, background .2s; }
+.zoom button.on { color: var(--yellow); background: rgba(22,22,24,.55); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); text-shadow: none; transform: scale(1.06); }
 
-/* modes */
-.modes { height: 44px; overflow: hidden; position: relative; touch-action: pan-y; }
-.mode-track { position: absolute; top: 0; left: 0; display: flex; gap: 22px; height: 100%; align-items: center; transition: transform .28s ease; white-space: nowrap; }
-.mode-track button { font-size: 13px; font-weight: 600; letter-spacing: .06em; color: var(--dim); padding: 8px 0; }
-.mode-track button[aria-pressed="true"] { color: var(--accent); }
+/* shutter row */
+.shRow { position: absolute; left: 0; right: 0; top: var(--shY); transform: translateY(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 34px; z-index: 2; }
+.shutter { position: relative; width: 76px; height: 76px; border-radius: 50%; }
+.shutter .ring { position: absolute; inset: 0; border-radius: 50%; border: 4px solid #fff; transition: border-color .3s, box-shadow .3s; }
+.app.video .shutter .ring { border-color: rgba(44,44,46,.82); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 0 0 1px rgba(255,255,255,.12); }
+.shutter .core { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 31px; background: #fff;
+  transition: width .28s cubic-bezier(.3,.7,.2,1), height .28s cubic-bezier(.3,.7,.2,1), margin .28s cubic-bezier(.3,.7,.2,1), border-radius .28s, background .3s, transform .12s; }
+.shutter:active .core { transform: scale(.9); }
+.app.video .shutter .core { background: var(--red); }
+.app.recording .shutter .core { width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 7px; }
+.side { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.side.pause { justify-self: start; background: rgba(44,44,46,.72); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.side.pause svg { width: 18px; height: 18px; }
+.side.still { justify-self: end; }
+.side.still span { width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.25); transition: transform .1s; }
+.side.still:active span { transform: scale(.88); }
+.app.recording .side { opacity: 1; pointer-events: auto; }
 
 /* bottom row */
-.bottom { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-block: 6px 18px; padding-inline: 18px; }
-.thumb { width: 46px; height: 46px; border-radius: 8px; overflow: hidden; background: #1c1c1e; border: 1px solid rgba(255,255,255,.14); }
+.bottom { position: absolute; left: 0; right: 0; top: var(--rowY); transform: translateY(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 26px; transition: opacity .25s; z-index: 2; }
+.app.recording .bottom { opacity: 0; pointer-events: none; }
+.thumb { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.14); justify-self: start; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb.pop img { animation: thumbin .35s ease-out; }
-@keyframes thumbin { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.shutter { width: 74px; height: 74px; border-radius: 50%; border: 4px solid #fff; display: grid; place-items: center; }
-.shutter i { width: 60px; height: 60px; border-radius: 50%; background: #fff; transition: transform .1s; }
-.shutter:active i { transform: scale(.88); }
-.cycle { justify-self: end; width: 46px; height: 46px; border-radius: 50%; background: var(--glass-2); display: grid; place-items: center; }
-.cycle svg { width: 24px; height: 24px; }
+.thumb.pop img { animation: tpop .4s cubic-bezier(.2,.9,.3,1.1); }
+@keyframes tpop { from { transform: scale(.3); opacity: .2; } to { transform: scale(1); opacity: 1; } }
+.modes { position: relative; display: flex; height: 40px; padding: 3px; border-radius: 20px; background: var(--chip); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.06); }
+.modes .hl { position: absolute; top: 3px; bottom: 3px; border-radius: 17px; background: #161617; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), 0 1px 3px rgba(0,0,0,.5); transition: left .3s cubic-bezier(.3,.7,.2,1), width .3s cubic-bezier(.3,.7,.2,1); }
+.modes button { position: relative; padding: 0 16px; font-size: 13.5px; font-weight: 500; letter-spacing: .02em; transition: color .25s; }
+.modes button[aria-pressed="true"] { color: var(--yellow); }
+.flip { justify-self: end; width: 44px; height: 44px; border-radius: 50%; background: rgba(58,58,60,.62); display: grid; place-items: center; }
+.flip svg { width: 24px; height: 24px; transition: transform .45s cubic-bezier(.3,.7,.2,1); }
 
-/* toast */
-.toast { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 8px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; pointer-events: none; transition: opacity .3s; opacity: 0; }
-.toast.show { opacity: 1; }
+/* settings sheet */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .35s; z-index: 10; }
+.backdrop.on { opacity: 1; pointer-events: auto; }
+.sheet { position: fixed; left: 50%; bottom: 0; width: 100%; max-width: 440px; height: calc(100% - var(--st) - 18px); transform: translate(-50%, 102%); transition: transform .4s cubic-bezier(.2,.85,.25,1);
+  background: var(--sheet); border-radius: 14px 14px 0 0; z-index: 11; display: grid; grid-template-rows: auto 1fr; }
+.sheet.on { transform: translate(-50%, 0); }
+.sheet header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 8px 16px 10px; border-bottom: .5px solid var(--sep); position: relative; touch-action: none; }
+.sheet header::before { content: ""; position: absolute; top: 5px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: rgba(255,255,255,.2); }
+.sheet header h2 { grid-column: 2; margin: 10px 0 0; font-size: 17px; font-weight: 600; }
+.sheet header button { grid-column: 3; justify-self: end; margin-top: 10px; color: var(--accent); font-size: 17px; font-weight: 600; }
+.sheet .body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 28px); display: grid; gap: 22px; align-content: start; }
+.note { display: flex; gap: 12px; align-items: center; background: var(--cell); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.35; color: rgba(255,255,255,.85); }
+.note svg { width: 20px; height: 20px; flex: none; color: var(--accent); }
+.sec h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 0 4px 4px; font-size: 13px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+.sec h3 button { color: var(--accent); font-size: 14px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.sec p.sub { margin: 0 4px 8px; font-size: 13px; line-height: 1.35; color: rgba(235,235,245,.45); }
+.tiles { display: flex; gap: 10px; overflow-x: auto; padding: 10px; background: var(--cell); border-radius: 14px; scrollbar-width: none; }
+.tiles::-webkit-scrollbar { display: none; }
+.tile { position: relative; flex: none; width: 92px; height: 148px; border-radius: 12px; overflow: hidden; background: #3a3a3c; cursor: pointer; }
+.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile.add { display: grid; place-items: center; background: #38383a; }
+.tile.add i { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: #1b1330; display: grid; place-items: center; font-style: normal; font-size: 28px; font-weight: 400; line-height: 1; }
+.tile.sel { box-shadow: inset 0 0 0 3px var(--accent); }
+.tile .x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,.6); display: grid; place-items: center; }
+.tile .x svg { width: 10px; height: 10px; }
+.tile .dur { position: absolute; left: 7px; bottom: 5px; font-size: 11px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+.tile.busy::after { content: ""; position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.list { background: var(--cell); border-radius: 12px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; min-height: 48px; }
+.row + .row { border-top: .5px solid var(--sep); }
+.row .t { flex: 1; min-width: 0; }
+.row .t b { display: block; font-weight: 400; font-size: 16px; }
+.row .t small { display: block; margin-top: 2px; font-size: 13px; line-height: 1.3; color: rgba(235,235,245,.5); }
+.switch { position: relative; flex: none; width: 51px; height: 31px; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 16px; background: rgba(120,120,128,.32); transition: background .25s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); transition: transform .25s cubic-bezier(.3,.7,.2,1); }
+.switch input:checked + span { background: var(--green); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: flex; background: rgba(118,118,128,.24); border-radius: 9px; padding: 2px; flex: none; }
+.seg button { padding: 5px 10px; border-radius: 7px; font-size: 13px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: #636366; }
+.how { font-size: 13.5px; line-height: 1.45; color: rgba(235,235,245,.6); margin: 0 4px; }
+.how b { color: #fff; font-weight: 600; }
 
-/* gallery */
-.gallery { position: fixed; inset: 0; background: #000; z-index: 20; display: grid; grid-template-rows: auto 1fr auto auto; padding-inline: 16px; padding-block: calc(env(safe-area-inset-top, 0px) + 8px) calc(env(safe-area-inset-bottom, 0px) + 12px); }
-.g-top { display: flex; justify-content: space-between; align-items: center; height: 44px; max-width: 700px; width: 100%; margin: 0 auto; }
-.g-top button { color: var(--accent); font-size: 16px; font-weight: 600; }
-.g-top span { font-size: 14px; color: var(--dim); }
-.g-main { display: grid; place-items: center; min-height: 0; }
-.g-main img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.g-cap { text-align: center; font-family: var(--mono); font-size: 12px; color: var(--dim); padding-block: 10px; font-variant-numeric: tabular-nums; }
-.g-strip { display: flex; gap: 4px; overflow-x: auto; justify-content: safe center; }
-.g-strip button { flex: none; width: 48px; height: 64px; opacity: .55; }
-.g-strip button.on { opacity: 1; outline: 2px solid var(--fg); }
-.g-strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.g-empty { color: var(--dim); }
+/* photo viewer */
+.viewer { position: fixed; inset: 0; background: #000; z-index: 20; display: grid; grid-template-rows: auto 1fr auto; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); animation: vin .28s ease-out; }
+@keyframes vin { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.viewer .vt { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 48px; padding: 0 10px; }
+.viewer .vt button { width: 40px; height: 40px; display: grid; place-items: center; }
+.viewer .vt button svg { width: 22px; height: 22px; }
+.viewer .vt span { font-size: 15px; font-weight: 600; text-align: center; }
+.viewer .vt span small { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.viewer .vm { position: relative; min-height: 0; overflow: hidden; touch-action: pan-y; }
+.viewer .vm img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.viewer .vm .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(0,0,0,.45); display: grid; place-items: center; }
+.viewer .strip { display: flex; gap: 2px; justify-content: center; padding: 10px 8px 14px; overflow-x: auto; }
+.viewer .strip button { flex: none; width: 34px; height: 46px; opacity: .6; }
+.viewer .strip button.on { opacity: 1; width: 46px; }
+.viewer .strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-@media (prefers-reduced-motion: reduce) { .mode-track, .af, .chev svg { transition: none; } .blackout.go, .af.pop, .thumb.pop img { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .vf, .media, .zoom, .modes .hl, .app, .sheet { transition-duration: .01s !important; }
+  .focus.pop, .thumb.pop img, .blink.go, .more, .viewer { animation: none !important; }
+}
 </style>
+</head>
+<body>
+<div class="probe" id="probe"></div>
 
-<div class="phone" id="phone">
-  <div class="top">
-    <button class="icon-btn" id="flashBtn" aria-label="Вспышка" aria-pressed="false">
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.2 2 5 13.4h5.6L9.4 22 18 10.2h-5.7L13.2 2Z"/></svg>
-    </button>
-    <button class="chev" id="chev" aria-label="Настройки камеры" aria-expanded="false">
-      <svg viewBox="0 0 22 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 10 11 2l9 8"/></svg>
-    </button>
-    <button class="icon-btn right" id="histBtn" aria-label="Гистограмма" aria-pressed="false">
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="13" width="3" height="8" rx="1"/><rect x="8" y="8" width="3" height="13" rx="1"/><rect x="13" y="4" width="3" height="17" rx="1"/><rect x="18" y="10" width="3" height="11" rx="1"/></svg>
-    </button>
-  </div>
-  <div class="readout" id="readout" aria-live="polite"></div>
+<div class="app photo" id="app">
+  <canvas id="bg" width="27" height="48"></canvas>
 
   <div class="vf" id="vf">
-    <canvas id="view" width="900" height="1200" aria-label="Видоискатель"></canvas>
-    <div class="gridlines" id="gridlines"><i style="left:33.33%;top:0;bottom:0;width:1px"></i><i style="left:66.66%;top:0;bottom:0;width:1px"></i><i style="top:33.33%;left:0;right:0;height:1px"></i><i style="top:66.66%;left:0;right:0;height:1px"></i></div>
-    <div class="af dim" id="af" style="left:52%;top:64%"><span class="tag" id="afTag" hidden>Фокус заблокирован</span><span class="sunline"></span>
-      <svg class="sun" id="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 1.5v2.5M12 20v2.5M1.5 12H4M20 12h2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
+    <div class="media" id="media">
+      <canvas id="demo" width="540" height="960"></canvas>
+      <video id="feed" playsinline webkit-playsinline muted autoplay preload="auto" hidden></video>
     </div>
+    <div class="gridlines" id="grid" hidden><i style="left:33.333%;top:0;bottom:0;width:1px"></i><i style="left:66.666%;top:0;bottom:0;width:1px"></i><i style="top:33.333%;left:0;right:0;height:1px"></i><i style="top:66.666%;left:0;right:0;height:1px"></i></div>
+    <div class="focus" id="focus"><span class="track"></span>
+      <svg class="sun" id="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M4.8 19.2l1.8-1.8M17.4 6.6l1.8-1.8"/></svg>
+    </div>
+    <div class="lockTag" id="lockTag" hidden></div>
+    <div class="countdown" id="countdown" hidden></div>
     <div class="hint" id="hint" hidden></div>
-    <canvas class="histo" id="histo" width="256" height="128" hidden></canvas>
-    <div class="blackout" id="blackout"></div>
-
-    <div class="overlay" id="overlay">
-      <div class="dial" id="dial" hidden>
-        <div class="dial-label"><span id="dialName"></span><b id="dialVal"></b><em id="dialNote"></em></div>
-        <div class="ruler" id="ruler" tabindex="0" role="slider" aria-label="Значение"><div class="track" id="track"></div><div class="needle"></div></div>
-      </div>
-      <div class="tools" id="tools" hidden></div>
-      <div class="zoom" id="zoom"></div>
-    </div>
+    <div class="blink" id="blink"></div>
   </div>
 
-  <div class="modes" id="modes"><div class="mode-track" id="modeTrack"></div></div>
+  <div class="pill left" id="fmtPill">
+    <button type="button" id="resBtn" aria-label="Resolution"><span id="resTxt">HD</span><sup>RES</sup></button>
+    <button type="button" id="fpsBtn" aria-label="Frame rate"><span id="fpsTxt">30</span><sup>FPS</sup></button>
+  </div>
+  <div class="pill right" id="ctrlPill">
+    <button type="button" id="flashBtn" aria-label="Flash" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M13.4 2.5 5.6 13.2h5.5l-1 8.3 7.8-10.7h-5.5l1-8.3Z"/><path class="slash" d="M4 3.5l16.5 17"/></svg>
+    </button>
+    <button type="button" id="liveBtn" aria-label="Live" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="9.2" stroke-dasharray="1.1 2.6"/><path class="slash" d="M3.5 3.5l17 17"/></svg>
+    </button>
+    <button type="button" id="moreBtn" aria-label="More controls" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="9" r="1.9"/><circle cx="12" cy="9" r="1.9"/><circle cx="18" cy="9" r="1.9"/><circle cx="6" cy="15" r="1.9"/><circle cx="12" cy="15" r="1.9"/><circle cx="18" cy="15" r="1.9"/></svg>
+    </button>
+  </div>
+  <div class="more" id="morePanel" hidden>
+    <button type="button" id="timerBtn"><span data-i="timer">Timer</span><b id="timerVal">Off</b></button>
+    <button type="button" id="gridBtn"><span data-i="grid">Grid</span><b id="gridVal">Off</b></button>
+    <button type="button" id="soundBtn"><span data-i="sound">Shutter sound</span><b id="soundVal">On</b></button>
+  </div>
+  <div class="recTimer" id="recTimer">00:00:00</div>
+
+  <div class="zoom" id="zoom"></div>
+
+  <div class="shRow">
+    <button type="button" class="side pause" id="pauseBtn" aria-label="Pause">
+      <svg viewBox="0 0 18 18" fill="#fff" aria-hidden="true" id="pauseIco"><rect x="3" y="2" width="4" height="14" rx="1.2"/><rect x="11" y="2" width="4" height="14" rx="1.2"/></svg>
+    </button>
+    <button type="button" class="shutter" id="shutter" aria-label="Take photo"><span class="ring"></span><span class="core"></span></button>
+    <button type="button" class="side still" id="stillBtn" aria-label="Take photo while recording"><span></span></button>
+  </div>
 
   <div class="bottom">
-    <button class="thumb" id="thumb" aria-label="Открыть снимки"><img id="thumbImg" alt="" hidden></button>
-    <button class="shutter" id="shoot" aria-label="Снять"><i></i></button>
-    <button class="cycle" id="cycleBtn" aria-label="Сменить освещение">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>
+    <button type="button" class="thumb" id="thumb" aria-label="Photos"><img id="thumbImg" alt="" hidden></button>
+    <div class="modes" id="modes" role="group" aria-label="Mode">
+      <span class="hl" id="modeHl"></span>
+      <button type="button" data-m="video" aria-pressed="false">VIDEO</button>
+      <button type="button" data-m="photo" aria-pressed="true">PHOTO</button>
+    </div>
+    <button type="button" class="flip" id="flipBtn" aria-label="Switch camera">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.2 9.2A7.6 7.6 0 0 0 5.6 7.3"/><path d="M4.6 4.4v3.8h3.8"/><path d="M4.8 14.8a7.6 7.6 0 0 0 13.6 1.9"/><path d="M19.4 19.6v-3.8h-3.8"/></svg>
     </button>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="backdrop" id="backdrop"></div>
+<section class="sheet" id="sheet" aria-label="Настройки" aria-hidden="true">
+  <header><h2>Настройки</h2><button type="button" id="doneBtn">Готово</button></header>
+  <div class="body">
+    <div class="note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></svg>
+      <span>Видео никуда не загружается. Оно хранится только в памяти этого телефона.</span>
+    </div>
 
-<div class="gallery" id="gallery" hidden>
-  <div class="g-top"><span id="gCount"></span><button type="button" id="gDone">Готово</button></div>
-  <div class="g-main"><img id="gImg" alt=""><p class="g-empty" id="gEmpty">Снимков пока нет.</p></div>
-  <div class="g-cap" id="gCap"></div>
-  <div class="g-strip" id="gStrip"></div>
+    <div class="sec">
+      <h3>Задняя камера <button type="button" data-reset="back">Сбросить</button></h3>
+      <p class="sub">Играет вместо изображения с камеры, когда вы её открываете. Нажмите на ролик, чтобы выбрать его.</p>
+      <div class="tiles" id="tiles-back"></div>
+    </div>
+
+    <div class="sec">
+      <h3>Фронтальная камера <button type="button" data-reset="front">Сбросить</button></h3>
+      <p class="sub">Включается кнопкой переворота камеры. Если здесь пусто, продолжит играть видео задней камеры.</p>
+      <div class="tiles" id="tiles-front"></div>
+    </div>
+
+    <div class="sec">
+      <h3>Фото в галерее <button type="button" data-reset="gallery">Сбросить</button></h3>
+      <p class="sub">Картинка в кружке слева внизу, пока вы ничего не сняли.</p>
+      <div class="tiles" id="tiles-gallery"></div>
+    </div>
+
+    <div class="sec">
+      <h3>Воспроизведение</h3>
+      <div class="list">
+        <label class="row"><span class="t"><b>Повторять видео</b></span><span class="switch"><input type="checkbox" id="optLoop"><span></span></span></label>
+        <label class="row"><span class="t"><b>Сначала при открытии</b><small>Каждый раз, когда вы открываете приложение, ролик начинается с начала. Если выключить, он продолжит с того же места.</small></span><span class="switch"><input type="checkbox" id="optRestart"><span></span></span></label>
+        <label class="row"><span class="t"><b>Приближение в режиме видео</b><small>В режиме видео картинка чуть крупнее, как на iPhone. Выключите, чтобы ролик помещался целиком.</small></span><span class="switch"><input type="checkbox" id="optZoom"><span></span></span></label>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3>Камера</h3>
+      <div class="list">
+        <label class="row"><span class="t"><b>Звук затвора</b></span><span class="switch"><input type="checkbox" id="optSound"><span></span></span></label>
+        <div class="row"><span class="t"><b>Язык подписей</b><small>ВИДЕО / ФОТО или VIDEO / PHOTO</small></span>
+          <span class="seg" id="langSeg"><button type="button" data-l="auto">Авто</button><button type="button" data-l="en">EN</button><button type="button" data-l="ru">RU</button></span></div>
+      </div>
+    </div>
+
+    <p class="how"><b>Как поставить на экран «Домой».</b> Откройте страницу в Safari, нажмите «Поделиться» и выберите «На экран „Домой“». Приложение будет открываться на весь экран, без адресной строки.</p>
+    <p class="how"><b>Как открыть это меню.</b> Удерживайте палец на самом верху экрана камеры около секунды.</p>
+  </div>
+</section>
+
+<div class="viewer" id="viewer" hidden>
+  <div class="vt">
+    <button type="button" id="vBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4 7 12l8 8"/></svg></button>
+    <span id="vTitle"></span><span></span>
+  </div>
+  <div class="vm" id="vMain"><img id="vImg" alt=""><span class="play" id="vPlay" hidden><svg viewBox="0 0 24 24" width="26" height="26" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></div>
+  <div class="strip" id="vStrip"></div>
 </div>
+
+<input type="file" id="filePick" accept="video/*" multiple hidden>
+<input type="file" id="imgPick" accept="image/*" hidden>
 
 <script>
 (() => {
 'use strict';
-const W = 900, H = 1200;
-const PXMM = H / 36;      // the long side of the frame maps to 36 mm (full-frame equivalent)
-const COC = 0.03;         // circle of confusion, mm
-const SUBJECT_D = 5;      // distance to the person, m
-const BASE_F = 26;        // "1×" lens, mm equivalent
-const XA = -W * .75, XB = W * 1.75, YA = -H * .8, YB = H * 1.6; // scene extent, enough for 0.5×
-
-const SHUTTERS = [30,25,20,15,13,10,8,6,5,4,3.2,2.5,2,1.6,1.3,1,0.8,0.6,0.5,0.4,0.3,1/4,1/5,1/6,1/8,1/10,1/13,1/15,1/20,1/25,1/30,1/40,1/50,1/60,1/80,1/100,1/125,1/160,1/200,1/250,1/320,1/400,1/500,1/640,1/800,1/1000,1/1250,1/1600,1/2000,1/2500,1/3200,1/4000,1/5000,1/6400,1/8000];
-const APERTURES = [1.4,1.6,1.8,2,2.2,2.5,2.8,3.2,3.5,4,4.5,5,5.6,6.3,7.1,8,9,10,11,13,14,16,18,20,22];
-const ISOS = [50,64,80,100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000,10000,12800];
-const FOCALS = [13,15,18,20,22,24,26,28,32,35,40,45,52,58,65,70,77,85,100,120,135,150,170,200];
-const FOCI = [0.3,0.4,0.5,0.6,0.7,0.8,1,1.2,1.4,1.7,2,2.5,3,4,5,6,8,10,14,20,30,50,100,Infinity];
-
-const LIGHTS = {
-  sunny:    { name: 'Солнце',      ev: 15, tint: [1, 1, 1],       sky: ['#2f73d0', '#a8d0f2'], sun: { x: .82, y: .12, r: 34, c: '#fffbe6', glow: 'rgba(255,250,220,.55)' }, shadow: .28 },
-  overcast: { name: 'Пасмурно',    ev: 12, tint: [.8, .82, .86],  sky: ['#8f98a3', '#cfd3d8'], shadow: 0 },
-  golden:   { name: 'Закат',       ev: 11, tint: [1, .8, .6],     sky: ['#44589a', '#f7a458'], sun: { x: .15, y: .44, r: 46, c: '#ffd9a0', glow: 'rgba(255,170,90,.6)' }, shadow: .2 },
-  dusk:     { name: 'Сумерки',     ev: 7,  tint: [.42, .47, .66], sky: ['#1b2856', '#a05f78'], lamps: .7, shadow: 0 },
-  night:    { name: 'Ночь',        ev: 4,  tint: [.2, .23, .38],  sky: ['#040816', '#18234a'], lamps: 1, stars: true, shadow: 0 },
-};
-const LIGHT_KEYS = Object.keys(LIGHTS);
-const SPEEDS = [ { v: 0, name: 'Стоит' }, { v: 1.4, name: 'Идёт' }, { v: 5, name: 'Бежит' }, { v: 9, name: 'Велосипед' } ];
-
-// Phone-style modes mapped onto real exposure programs.
-const MODES = [
-  { key: 'tv',    label: 'ВЫДЕРЖКА',  prog: 'Tv' },
-  { key: 'port',  label: 'ПОРТРЕТ',   prog: 'Av' },
-  { key: 'photo', label: 'ФОТО',      prog: 'P' },
-  { key: 'pro',   label: 'ПРО',       prog: 'M' },
-  { key: 'av',    label: 'ДИАФРАГМА', prog: 'Av' },
-];
-
-const S = { mode: 'photo', si: 44, ai: 3, ii: 3, autoIso: true, comp: 0, focal: 26, focus: SUBJECT_D, light: 'sunny', speed: 0, tripod: false, flash: false, grid: true };
-
-// ---------- helpers ----------
 const $ = id => document.getElementById(id);
-const log2 = Math.log2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-function nearest(arr, v) { let bi = 0, bd = Infinity; arr.forEach((a, i) => { const d = !isFinite(a) || !isFinite(v) ? (a === v ? 0 : Infinity) : Math.abs(Math.log(a) - Math.log(v)); if (d < bd) { bd = d; bi = i; } }); return bi; }
-const fmtT = t => t >= 0.3 ? `${+t.toFixed(1)}″` : `1/${Math.round(1 / t)}`;
-const fmtN = n => `ƒ${n}`;
-const fmtComp = c => { if (c === 0) return '0'; const s = c > 0 ? '+' : '−', a = Math.abs(c), w = Math.floor(a / 3), r = a % 3; return s + (w ? w : '') + (r ? (w ? ' ' : '') + r + '/3' : ''); };
-const fmtM = d => !isFinite(d) ? '∞' : d >= 10 ? `${Math.round(d)} м` : `${+d.toFixed(1)} м`;
-const fmtZ = f => { const z = f / BASE_F; return (z < 1 ? z.toFixed(1).replace(/^0/, '') : (Math.round(z * 10) / 10).toString().replace('.0', '')) + '×'; };
-function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const prog = () => MODES.find(m => m.key === S.mode).prog;
+const app = $('app'), vf = $('vf'), media = $('media'), feed = $('feed'), demo = $('demo');
 
-// ---------- exposure ----------
-function solve(iso) {
-  const L = LIGHTS[S.light], P = prog();
-  const target = L.ev + log2(iso / 100) - S.comp / 3;
-  let si = S.si, ai = S.ai, rawN = null;
-  if (P === 'Av') si = nearest(SHUTTERS, APERTURES[ai] ** 2 / 2 ** target);
-  else if (P === 'Tv') { rawN = Math.sqrt(SHUTTERS[si] * 2 ** target); ai = nearest(APERTURES, rawN); }
-  else if (P === 'P') { ai = nearest(APERTURES, Math.sqrt(2 ** clamp(target / 2 - 1.5, 1, 8.9))); si = nearest(SHUTTERS, APERTURES[ai] ** 2 / 2 ** target); }
-  if (S.flash && SHUTTERS[si] < 1 / 250 && P !== 'M' && P !== 'Tv') si = SHUTTERS.indexOf(1 / 250); // flash sync limit
-  return { si, ai, iso, rawN };
+// ---------- text ----------
+const TEXT = {
+  en: { video: 'VIDEO', photo: 'PHOTO', lock: 'AE/AF LOCK', hint: 'Hold the top of the screen to add your video', timer: 'Timer', grid: 'Grid', sound: 'Shutter sound', off: 'Off', on: 'On', s: 's', today: 'Today' },
+  ru: { video: 'ВИДЕО', photo: 'ФОТО', lock: 'ЗАМОК АЭ/АФ', hint: 'Удерживайте верх экрана, чтобы добавить своё видео', timer: 'Таймер', grid: 'Сетка', sound: 'Звук затвора', off: 'Выкл.', on: 'Вкл.', s: ' с', today: 'Сегодня' },
+};
+const sysLang = (navigator.language || 'en').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+const T = () => TEXT[S.lang === 'auto' ? sysLang : S.lang];
+const numFmt = new Intl.NumberFormat(navigator.language || 'en', { maximumFractionDigits: 1 });
+
+// ---------- persisted settings ----------
+const DEF = { backId: null, frontId: null, loop: true, restart: true, zoomVideo: true, sound: true, lang: 'auto', grid: false, timer: 0, times: {}, hinted: false };
+let S = { ...DEF };
+try { S = { ...DEF, ...JSON.parse(localStorage.getItem('camsim') || '{}') }; } catch (e) {}
+const save = () => { try { localStorage.setItem('camsim', JSON.stringify(S)); } catch (e) {} };
+
+// ---------- runtime state ----------
+const R = { mode: 'photo', cam: 'back', zoom: 1, exposure: 0, flash: false, live: false, res: 'HD', fps: 30,
+  recording: false, paused: false, recAcc: 0, recFrom: 0, shots: [], busy: false };
+
+// ---------- IndexedDB: footage and gallery photo live on the device ----------
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('camsim', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'id' });
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function idb(mode, fn) {
+  const d = await dbp;
+  return new Promise((res, rej) => {
+    const tx = d.transaction('files', mode), req = fn(tx.objectStore('files'));
+    tx.oncomplete = () => res(req && req.result);
+    tx.onerror = () => rej(tx.error);
+  });
 }
-function compute() {
-  const L = LIGHTS[S.light], P = prog();
-  let r;
-  if (!S.autoIso) r = solve(ISOS[S.ii]);
-  else if (P === 'M') {
-    const N = APERTURES[S.ai], t = SHUTTERS[S.si];
-    r = { si: S.si, ai: S.ai, iso: ISOS[nearest(ISOS, clamp(100 * 2 ** (log2(N * N / t) - L.ev + S.comp / 3), 50, 12800))] };
-  } else {
-    const handheld = S.tripod ? 30 : 1 / S.focal;
-    for (const iso of ISOS) {
-      if (iso < 100 && !(L.ev >= 13)) continue;
-      r = solve(iso);
-      const ok = P === 'Tv' ? (r.rawN === null || r.rawN >= 1.4 / 1.12) : SHUTTERS[r.si] <= handheld * 1.12;
-      if (ok) break;
+const FILES = new Map(); // id -> {id, kind: back|front|gallery, blob, thumb, dur, added}
+
+// ---------- layout ----------
+function layout() {
+  const pr = getComputedStyle($('probe'));
+  const st = parseFloat(pr.paddingTop) || 0, sb = parseFloat(pr.paddingBottom) || 0;
+  const W = app.clientWidth, H = app.clientHeight;
+  const rowY = H - Math.max(sb, 12) - 28;   // bottom row centre
+  const shY = rowY - 94;                    // shutter centre
+  const pTop = st + 64;
+  let pH = W * 4 / 3;
+  if (pTop + pH > shY - 46) pH = Math.max(W * .9, shY - 46 - pTop);
+  const set = (k, v) => app.style.setProperty(k, v + 'px');
+  set('--st', st); set('--pTop', pTop); set('--pH', pH); set('--vTop', st); set('--vH', rowY - 38 - st);
+  set('--shY', shY); set('--rowY', rowY); set('--zP', Math.min(pTop + pH - 34, shY - 60)); set('--zV', shY - 90);
+  document.documentElement.style.setProperty('--st', st + 'px');
+  placeModeHl();
+}
+addEventListener('resize', layout);
+addEventListener('orientationchange', () => setTimeout(layout, 300));
+
+// ---------- demo footage, shown until you add your own ----------
+const dctx = demo.getContext('2d');
+const DW = demo.width, DH = demo.height, HOR = DH * .585;
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+const rr = rng(42);
+const ridge = (y0, amp, step) => { const pts = []; let y = y0; for (let x = -60; x <= DW + 60; x += step) { y = clamp(y + (rr() - .5) * amp, y0 - amp * 1.6, y0 + amp * .4); pts.push([x, y]); } return pts; };
+const FAR = ridge(HOR - 42, 26, 22), NEAR = ridge(HOR - 14, 20, 16);
+const CLOUDS = Array.from({ length: 7 }, (_, i) => ({ x: rr() * (DW + 400), y: DH * (.1 + rr() * .34), s: 40 + rr() * 60, v: 3 + rr() * 6, n: 4 + (rr() * 3 | 0), seed: i * 7 + 1 }));
+const GLINT = Array.from({ length: 150 }, () => ({ d: rr(), w: rr(), p: rr() * 6.28, f: 1.5 + rr() * 3 }));
+const WAVES = Array.from({ length: 260 }, () => ({ d: rr(), x: rr(), l: .4 + rr(), p: rr() * 6.28 }));
+function drawDemo(t) {
+  const c = dctx;
+  c.save();
+  // a little hand-held wobble so it reads as a live picture
+  const dx = Math.sin(t * 1.3) * 2.2 + Math.sin(t * 3.1) * 1.1, dy = Math.cos(t * 1.05) * 2 + Math.sin(t * 3.7) * .9, rot = Math.sin(t * .63) * .004;
+  c.translate(DW / 2 + dx, DH / 2 + dy); c.rotate(rot); c.scale(1.05, 1.05); c.translate(-DW / 2, -DH / 2);
+  let g = c.createLinearGradient(0, 0, 0, HOR);
+  g.addColorStop(0, '#16305f'); g.addColorStop(.45, '#3f5f9f'); g.addColorStop(.8, '#d98a66'); g.addColorStop(1, '#ffc27d');
+  c.fillStyle = g; c.fillRect(-40, -40, DW + 80, HOR + 42);
+  const sx = DW * .63, sy = HOR - 26;
+  g = c.createRadialGradient(sx, sy, 0, sx, sy, 260);
+  g.addColorStop(0, 'rgba(255,236,190,.95)'); g.addColorStop(.12, 'rgba(255,200,130,.55)'); g.addColorStop(1, 'rgba(255,160,90,0)');
+  c.fillStyle = g; c.fillRect(sx - 260, sy - 260, 520, 520);
+  c.fillStyle = '#fff4d8'; c.beginPath(); c.arc(sx, sy, 30, 0, 7); c.fill();
+  for (const cl of CLOUDS) {
+    const x = ((cl.x + t * cl.v) % (DW + 400)) - 200, r2 = rng(cl.seed);
+    for (let j = 0; j < cl.n; j++) {
+      const ex = x + (j - cl.n / 2) * cl.s * .6, ey = cl.y + (r2() - .5) * cl.s * .3, rx = cl.s * (.6 + r2() * .5), ry = cl.s * (.3 + r2() * .15);
+      const cg = c.createLinearGradient(0, ey - ry, 0, ey + ry);
+      cg.addColorStop(0, 'rgba(255,214,190,.55)'); cg.addColorStop(1, 'rgba(120,110,160,.35)');
+      c.fillStyle = cg; c.beginPath(); c.ellipse(ex, ey, rx, ry, 0, 0, 7); c.fill();
     }
   }
-  const t = SHUTTERS[r.si], N = APERTURES[r.ai], iso = r.iso;
-  return { t, N, iso, si: r.si, ai: r.ai, offset: L.ev + log2(iso / 100) - log2(N * N / t) };
-}
-
-// ---------- optics ----------
-function cocPx(D, N, f, s) {
-  const Dm = D * 1000, Sm = s * 1000;
-  const b = (f * f / N) * Math.abs(1 / Dm - (isFinite(Sm) ? 1 / Sm : 0)) / (isFinite(Sm) ? (1 - f / Sm) : 1);
-  return b * PXMM;
-}
-function dof(N, f, s) {
-  const Hf = f * f / (N * COC) + f;
-  if (!isFinite(s)) return { near: Hf / 1000, far: Infinity };
-  const Sm = s * 1000;
-  return { near: Sm * (Hf - f) / (Hf + Sm - 2 * f) / 1000, far: Sm < Hf ? Sm * (Hf - f) / (Hf - Sm) / 1000 : Infinity };
-}
-
-// ---------- scene ----------
-let TINT = [1, 1, 1], LIFT = 1;
-function shade(hex, k = 1) {
-  const n = parseInt(hex.slice(1), 16); k *= LIFT;
-  const r = ((n >> 16) & 255) * Math.min(1, TINT[0] * k), g = ((n >> 8) & 255) * Math.min(1, TINT[1] * k), b = (n & 255) * Math.min(1, TINT[2] * k);
-  return `rgb(${r | 0},${g | 0},${b | 0})`;
-}
-const HZ = H * .5; // horizon
-
-function drawFar(c, L) {
-  const g = c.createLinearGradient(0, 0, 0, HZ);
-  g.addColorStop(0, L.sky[0]); g.addColorStop(1, L.sky[1]);
-  c.fillStyle = g; c.fillRect(XA, YA, XB - XA, YB - YA);
-  const rnd = mulberry(7);
-  if (L.stars) {
-    for (let i = 0; i < 700; i++) { c.fillStyle = `rgba(255,255,255,${.3 + rnd() * .7})`; const s = rnd() < .9 ? 1.4 : 2.4; c.fillRect(XA + rnd() * (XB - XA), YA + rnd() * (HZ * .9 - YA), s, s); }
-    c.fillStyle = '#f2efe0'; c.beginPath(); c.arc(W * .8, H * .12, 26, 0, 7); c.fill();
-    c.fillStyle = L.sky[0]; c.beginPath(); c.arc(W * .8 + 11, H * .12 - 7, 23, 0, 7); c.fill();
+  const poly = (pts, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(pts[0][0], HOR + 2); for (const p of pts) c.lineTo(p[0], p[1]); c.lineTo(pts[pts.length - 1][0], HOR + 2); c.closePath(); c.fill(); };
+  poly(FAR, 'rgba(118,104,150,.85)'); poly(NEAR, '#4a3f66');
+  g = c.createLinearGradient(0, HOR, 0, DH);
+  g.addColorStop(0, '#e89a6e'); g.addColorStop(.12, '#8a6a88'); g.addColorStop(.45, '#2f3d6c'); g.addColorStop(1, '#0e1734');
+  c.fillStyle = g; c.fillRect(-40, HOR, DW + 80, DH - HOR + 40);
+  c.lineCap = 'round';
+  for (const w of WAVES) {
+    const y = HOR + 4 + w.d * w.d * (DH - HOR), k = .2 + w.d * 1.8;
+    const x = ((w.x * DW + t * 12 * k + Math.sin(t + w.p) * 6) % (DW + 80)) - 40;
+    c.strokeStyle = `rgba(255,255,255,${.05 + .07 * Math.max(0, Math.sin(t * 1.4 + w.p))})`;
+    c.lineWidth = .8 + k * 1.4; c.beginPath(); c.moveTo(x, y); c.lineTo(x + w.l * 22 * k, y); c.stroke();
   }
-  if (L.sun) {
-    const sx = W * L.sun.x, sy = H * L.sun.y;
-    const gg = c.createRadialGradient(sx, sy, 0, sx, sy, L.sun.r * 6);
-    gg.addColorStop(0, L.sun.glow); gg.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = gg; c.fillRect(sx - L.sun.r * 6, sy - L.sun.r * 6, L.sun.r * 12, L.sun.r * 12);
-    c.fillStyle = L.sun.c; c.beginPath(); c.arc(sx, sy, L.sun.r, 0, 7); c.fill();
+  for (const s of GLINT) {
+    const y = HOR + 3 + s.d * s.d * (DH - HOR) * .9, spread = 14 + s.d * 120;
+    const x = sx + (s.w - .5) * spread * 2, a = Math.max(0, Math.sin(t * s.f + s.p));
+    c.strokeStyle = `rgba(255,222,165,${a * (1 - s.d * .7)})`; c.lineWidth = 1.2 + s.d * 3;
+    c.beginPath(); c.moveTo(x - 4 - s.d * 18, y); c.lineTo(x + 4 + s.d * 18, y); c.stroke();
   }
-  if (!L.lamps) {
-    const cr = mulberry(21);
-    c.fillStyle = S.light === 'overcast' ? 'rgba(235,237,240,.55)' : S.light === 'golden' ? 'rgba(255,214,190,.6)' : 'rgba(255,255,255,.85)';
-    for (let i = 0; i < 14; i++) {
-      const cx = XA + cr() * (XB - XA), cy = YA * .4 + cr() * (HZ * .6 - YA * .4), s = 30 + cr() * 45;
-      for (let j = 0; j < 5; j++) { c.beginPath(); c.ellipse(cx + (j - 2) * s * .7, cy + Math.sin(j * 2.1) * s * .2, s * (.8 + cr() * .4), s * .45, 0, 0, 7); c.fill(); }
-    }
-  }
-  const ranges = [{ y: HZ - 70, a: 80, col: '#8aa0c0', seed: 3 }, { y: HZ - 25, a: 60, col: '#6c86a6', seed: 9 }];
-  for (const m of ranges) {
-    const r2 = mulberry(m.seed);
-    c.fillStyle = shade(m.col);
-    c.beginPath(); c.moveTo(XA, YB);
-    let y = m.y;
-    for (let x = XA; x <= XB; x += 20) { y = clamp(y + (r2() - .5) * m.a * .6, m.y - m.a, m.y + m.a * .5); c.lineTo(x, y); }
-    c.lineTo(XB, YB); c.closePath(); c.fill();
-  }
-}
-
-function drawMid(c, L) {
-  const g = c.createLinearGradient(0, HZ, 0, H);
-  g.addColorStop(0, shade('#7ea75a')); g.addColorStop(1, shade('#4f8a36'));
-  c.fillStyle = g;
-  c.beginPath(); c.moveTo(XA, YB);
-  for (let x = XA; x <= XB; x += 40) c.lineTo(x, HZ + 5 + Math.sin(x / 160) * 10);
-  c.lineTo(XB, YB); c.closePath(); c.fill();
-  // path in perspective
-  const top = HZ + 12, k = (YB - top) / (H - top);
-  c.fillStyle = shade('#cdb88c');
-  c.beginPath(); c.moveTo(W * .5, top); c.lineTo(W * .535, top);
-  c.lineTo(W * .535 + (W * .85 - W * .535) * k, YB); c.lineTo(W * .5 - (W * .5 - W * .2) * k, YB); c.closePath(); c.fill();
-  const r = mulberry(11);
-  for (let i = 0; i < 110; i++) {
-    const x = XA + r() * (XB - XA), base = HZ + 12 + Math.sin(x / 160) * 10, h = 45 + r() * 60;
-    const conif = r() < .55, col = r() < .5 ? '#2e6436' : '#3c7a3c';
-    if (x > W * .46 && x < W * .58) continue;
-    c.fillStyle = shade('#4a3322'); c.fillRect(x - 2, base - h * .3, 4, h * .3);
-    c.fillStyle = shade(col);
-    if (conif) { c.beginPath(); c.moveTo(x, base - h); c.lineTo(x - h * .28, base - h * .2); c.lineTo(x + h * .28, base - h * .2); c.closePath(); c.fill(); }
-    else { c.beginPath(); c.ellipse(x, base - h * .6, h * .3, h * .4, 0, 0, 7); c.fill(); }
-  }
-  const hx = W * .72, hy = HZ + 14;
-  c.fillStyle = shade('#e7dcc6'); c.fillRect(hx, hy - 52, 76, 52);
-  c.fillStyle = shade('#9b3b2e'); c.beginPath(); c.moveTo(hx - 8, hy - 50); c.lineTo(hx + 38, hy - 84); c.lineTo(hx + 84, hy - 50); c.closePath(); c.fill();
-  c.fillStyle = L.lamps ? '#ffd27a' : shade('#5c6f86');
-  c.fillRect(hx + 10, hy - 40, 15, 15); c.fillRect(hx + 51, hy - 40, 15, 15);
-  c.fillStyle = shade('#5a3b26'); c.fillRect(hx + 31, hy - 28, 14, 28);
-}
-
-const LAMPS = [-.45, .12, .9, 1.45];
-const FENCE_Y = H * .63, LAMP_Y = H * .38;
-function drawFence(c, L) {
-  c.fillStyle = shade('#8a5a3a');
-  for (let x = XA; x < XB; x += 46) c.fillRect(x, FENCE_Y - 34, 8, 52);
-  c.fillStyle = shade('#9a6a46');
-  c.fillRect(XA, FENCE_Y - 28, XB - XA, 7); c.fillRect(XA, FENCE_Y - 6, XB - XA, 7);
-  for (const lx of LAMPS) {
-    const x = W * lx;
-    c.fillStyle = shade('#2c3036'); c.fillRect(x - 4, LAMP_Y, 8, FENCE_Y + 20 - LAMP_Y); c.fillRect(x - 18, LAMP_Y - 6, 36, 8);
-    c.fillStyle = L.lamps ? '#ffe3a0' : shade('#c9d0d8');
-    c.beginPath(); c.moveTo(x - 14, LAMP_Y + 2); c.lineTo(x + 14, LAMP_Y + 2); c.lineTo(x + 9, LAMP_Y + 20); c.lineTo(x - 9, LAMP_Y + 20); c.closePath(); c.fill();
-  }
-}
-function drawLights(c, L) {
-  if (!L.lamps) return;
-  for (const lx of LAMPS) {
-    const x = W * lx, y = LAMP_Y + 12;
-    const g = c.createRadialGradient(x, y, 0, x, y, 120);
-    g.addColorStop(0, `rgba(255,220,150,${.9 * L.lamps})`); g.addColorStop(.25, `rgba(255,190,110,${.35 * L.lamps})`); g.addColorStop(1, 'rgba(255,170,80,0)');
-    c.fillStyle = g; c.fillRect(x - 130, y - 130, 260, 260);
-    const py = FENCE_Y + 30, pool = c.createRadialGradient(x, py, 0, x, py, 130);
-    pool.addColorStop(0, `rgba(255,200,130,${.25 * L.lamps})`); pool.addColorStop(1, 'rgba(255,200,130,0)');
-    c.fillStyle = pool; c.beginPath(); c.ellipse(x, py, 150, 32, 0, 0, 7); c.fill();
-  }
-}
-
-const PERSON = { x: W * .52, feet: H * .86, h: H * .34 };
-function drawPerson(c, L) {
-  const fx = PERSON.x, fy = PERSON.feet, s = PERSON.h / 195;
-  const sw = S.speed > 0 ? 0.38 : 0.04;
-  const sh = h => shade(h);
-  if (L.shadow) { c.fillStyle = `rgba(0,0,0,${L.shadow})`; c.beginPath(); c.ellipse(fx + (S.light === 'golden' ? 60 : 18), fy, 60, 9, 0, 0, 7); c.fill(); }
-  c.save(); c.translate(fx, fy); c.scale(s, s);
-  const limb = (x, y, len, ang, w, col) => { c.save(); c.translate(x, y); c.rotate(ang); c.fillStyle = col; c.beginPath(); c.roundRect(-w / 2, 0, w, len, w / 2); c.fill(); c.restore(); };
-  limb(4, -92, 86, -sw, 17, sh('#243149'));
-  limb(10, -148, 58, sw * 1.1, 12, sh('#b8392a'));
-  c.fillStyle = sh('#e8b92f'); c.beginPath(); c.roundRect(-34, -150, 22, 50, 6); c.fill();
-  limb(-2, -92, 86, sw, 17, sh('#2f3d5c'));
-  c.fillStyle = sh('#d8452f'); c.beginPath(); c.roundRect(-18, -154, 38, 68, 10); c.fill();
-  c.fillStyle = sh('#f1efe8'); c.fillRect(-1, -150, 3, 58);
-  limb(-4, -148, 58, -sw * 1.1, 12, sh('#e0503a'));
-  c.fillStyle = sh('#e3aa86'); c.beginPath(); c.arc(-4 + Math.sin(sw * 1.1) * 58, -148 + Math.cos(sw * 1.1) * 58, 6, 0, 7); c.fill();
-  c.fillStyle = sh('#d99c79'); c.fillRect(-4, -164, 10, 12);
-  c.fillStyle = sh('#e3aa86'); c.beginPath(); c.ellipse(2, -176, 14, 16, 0, 0, 7); c.fill();
-  c.fillStyle = sh('#3a2518'); c.beginPath(); c.ellipse(-1, -186, 15, 9, -.2, 0, 7); c.fill(); c.fillRect(-14, -188, 8, 18);
-  c.fillStyle = sh('#1f1a17'); c.beginPath(); c.arc(11, -177, 1.8, 0, 7); c.fill();
-  c.fillStyle = sh('#2c8fa0'); c.beginPath(); c.ellipse(0, -191, 16, 9, -.15, Math.PI, 0); c.fill();
   c.restore();
 }
 
-function drawFore(c) {
-  const r = mulberry(5);
-  const tuft = (x, base, h) => {
-    c.strokeStyle = shade(r() < .5 ? '#3f7f2e' : '#2f6a25'); c.lineWidth = 3 + r() * 2; c.lineCap = 'round';
-    for (let i = 0; i < 7; i++) { const a = (r() - .5) * .9; c.beginPath(); c.moveTo(x + (r() - .5) * 18, base); c.quadraticCurveTo(x + a * h * .4, base - h * .6, x + a * h, base - h * (.8 + r() * .3)); c.stroke(); }
-  };
-  const flower = (x, base, h, col) => {
-    c.strokeStyle = shade('#35722a'); c.lineWidth = 4;
-    const tx = x + (r() - .5) * 30, ty = base - h;
-    c.beginPath(); c.moveTo(x, base); c.quadraticCurveTo(x, base - h * .5, tx, ty); c.stroke();
-    c.fillStyle = shade(col);
-    const pr = 13 + r() * 8;
-    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; c.beginPath(); c.ellipse(tx + Math.cos(a) * pr * .8, ty + Math.sin(a) * pr * .8, pr * .6, pr * .38, a, 0, 7); c.fill(); }
-    c.fillStyle = shade('#f3c43a'); c.beginPath(); c.arc(tx, ty, pr * .38, 0, 7); c.fill();
-  };
-  const base = H + 20;
-  for (let row = 3; row >= 0; row--) for (let x = XA; x < XB; x += 38) tuft(x + row * 13, base - 10 + row * 110, 40 + r() * 50 + row * 30);
-  const cols = ['#ffffff', '#e8588a', '#ffffff', '#9d7bdc', '#f4f1f8'];
-  for (let i = 0; i < 12; i++) flower(XA + r() * (W * .2 - XA), base, 170 + r() * 190, cols[i % cols.length]);
-  for (let i = 0; i < 11; i++) flower(W * .84 + r() * (XB - W * .84), base, 150 + r() * 210, cols[(i + 2) % cols.length]);
-  for (let x = XA; x < W * .22; x += 22) tuft(x, base, 110 + r() * 90);
-  for (let x = W * .82; x < XB; x += 22) tuft(x, base, 110 + r() * 90);
+// ---------- source selection ----------
+let curId = null, curURL = null, useDemo = true;
+function pickId() {
+  if (R.cam === 'front' && S.frontId && FILES.has(S.frontId)) return S.frontId;
+  return S.backId && FILES.has(S.backId) ? S.backId : null;
 }
-
-const LAYERS = [
-  { key: 'far', d: 2000, draw: drawFar },
-  { key: 'mid', d: 60, draw: drawMid },
-  { key: 'fence', d: 14, draw: drawFence },
-  { key: 'lights', d: 14, draw: drawLights, add: true },
-  { key: 'person', d: SUBJECT_D, draw: drawPerson, motion: true, flash: 1 },
-  { key: 'fore', d: 1.4, draw: drawFore, flash: 1.25 },
-];
-const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
-for (const l of LAYERS) { l.cv = mk(); l.ctx = l.cv.getContext('2d', { willReadFrequently: true }); }
-const comp = mk(), tmp = mk(), tmp2 = mk(), small = document.createElement('canvas');
-let layerKey = '';
-const ZC = { x: W * .52, y: H * .62 };
-const zoomOf = () => S.focal / BASE_F;
-
-function renderLayers() {
-  const key = `${S.focal}|${S.light}|${S.speed}|${S.flash}`;
-  if (key === layerKey) return;
-  layerKey = key;
-  const L = LIGHTS[S.light], z = zoomOf();
-  TINT = L.tint;
-  for (const l of LAYERS) {
-    const c = l.ctx;
-    // flash lights near things; lamps lift the person a little at night
-    LIFT = l.flash && S.flash ? l.flash / Math.max(.2, (TINT[0] + TINT[1] + TINT[2]) / 3) / (l.d / SUBJECT_D) ** .5 : (l.key === 'person' && L.lamps ? 1.9 : 1);
-    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
-    c.setTransform(z, 0, 0, z, ZC.x * (1 - z), ZC.y * (1 - z));
-    l.draw(c, L);
-    c.setTransform(1, 0, 0, 1, 0, 0);
-  }
-  LIFT = 1;
-}
-
-const probe = document.createElement('canvas').getContext('2d');
-probe.filter = 'blur(2px)';
-const FILTER_OK = probe.filter === 'blur(2px)';
-function drawBlurred(ctx, src, sigma) {
-  if (sigma < .35) { ctx.drawImage(src, 0, 0); return; }
-  if (FILTER_OK) { ctx.filter = `blur(${sigma.toFixed(2)}px)`; ctx.drawImage(src, 0, 0); ctx.filter = 'none'; return; }
-  const k = Math.max(1, sigma / 1.5);
-  small.width = Math.max(1, Math.round(W / k)); small.height = Math.max(1, Math.round(H / k));
-  const s = small.getContext('2d');
-  s.clearRect(0, 0, small.width, small.height); s.drawImage(src, 0, 0, small.width, small.height);
-  ctx.imageSmoothingQuality = 'high'; ctx.drawImage(small, 0, 0, W, H);
-}
-function streak(dst, src, dx, dy) {
-  const c = dst.getContext('2d');
-  c.clearRect(0, 0, W, H);
-  const len = Math.hypot(dx, dy);
-  if (len < .6) { c.drawImage(src, 0, 0); return; }
-  const n = Math.min(48, Math.ceil(len / 1.5) + 1);
-  for (let i = 0; i < n; i++) { c.globalAlpha = 1 / (i + 1); c.drawImage(src, dx * (i / (n - 1) - .5), dy * (i / (n - 1) - .5)); }
-  c.globalAlpha = 1;
-}
-
-// ---------- render ----------
-const view = $('view'), vctx = view.getContext('2d');
-let last = null, info = {}, shakeAngle = .7, grainSeed = 1;
-function render() {
-  const r = last = compute();
-  const f = S.focal, s = S.focus;
-  renderLayers();
-  const diff = r.N > 8 ? (r.N - 8) * .07 : 0;
-  const cctx = comp.getContext('2d');
-  cctx.globalCompositeOperation = 'source-over';
-  cctx.clearRect(0, 0, W, H);
-  info = {};
-  for (const l of LAYERS) {
-    const b = Math.min(cocPx(l.d, r.N, f, s), 140);
-    info[l.key] = b;
-    let src = l.cv;
-    if (l.motion && S.speed > 0) {
-      const px = Math.min(f * SPEEDS[S.speed].v * r.t / l.d * PXMM, 700);
-      info.motion = S.flash && r.t >= 1 / 250 ? px * .35 : px; // flash freezes part of the motion
-      streak(tmp2, l.cv, info.motion, 0);
-      src = tmp2;
+function applySource() {
+  const id = pickId();
+  if (id) {
+    if (id !== curId) {
+      if (curURL) URL.revokeObjectURL(curURL);
+      curURL = URL.createObjectURL(FILES.get(id).blob);
+      curId = id;
+      feed.src = curURL;
+      feed.load();
     }
-    cctx.globalCompositeOperation = l.add ? 'lighter' : 'source-over';
-    drawBlurred(cctx, src, Math.hypot(b / 2.4, diff));
+    feed.loop = S.loop;
+    feed.hidden = false; demo.hidden = true; useDemo = false;
+    feed.play().catch(() => {});
+  } else {
+    if (curURL) { URL.revokeObjectURL(curURL); curURL = null; }
+    if (curId) { feed.removeAttribute('src'); feed.load(); }
+    curId = null;
+    feed.hidden = true; demo.hidden = false; useDemo = true;
   }
-  cctx.globalCompositeOperation = 'source-over';
-  info.shake = 0;
-  if (!S.tripod) {
-    info.shake = Math.min(f * r.t * .02 * PXMM, 260);
-    if (info.shake > .6) { streak(tmp, comp, Math.cos(shakeAngle) * info.shake, Math.sin(shakeAngle) * info.shake); cctx.clearRect(0, 0, W, H); cctx.drawImage(tmp, 0, 0); }
-  }
+  updateHint();
+}
+feed.muted = true; feed.defaultMuted = true;
+feed.addEventListener('loadedmetadata', () => {
+  const t = S.times[curId];
+  if (!S.restart && t && t < feed.duration - .3) feed.currentTime = t;
+  feed.play().catch(() => {});
+});
+let lastSave = 0;
+feed.addEventListener('timeupdate', () => {
+  if (!curId || S.restart) return;
+  const now = Date.now();
+  if (now - lastSave > 1000) { lastSave = now; S.times[curId] = feed.currentTime; save(); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    if (S.restart && curId) feed.currentTime = 0;
+    if (curId) feed.play().catch(() => {});
+  } else if (curId && !S.restart) { S.times[curId] = feed.currentTime; save(); }
+});
+// iOS can hold autoplay back until the first touch
+addEventListener('pointerdown', () => { if (curId && feed.paused && !feed.ended) feed.play().catch(() => {}); unlockAudio(); }, { capture: true });
 
-  const img = cctx.getImageData(0, 0, W, H), d = img.data;
-  const gain = 2 ** r.offset, lut = new Uint8ClampedArray(256);
-  for (let i = 0; i < 256; i++) {
-    let lin = (i / 255) ** 2.2 * gain;
-    if (lin > .85) lin = .85 + .15 * (1 - Math.exp(-(lin - .85) / .15));
-    lut[i] = Math.round(lin ** (1 / 2.2) * 255);
-  }
-  const sigma = 1.1 * Math.sqrt(r.iso / 100) * (r.iso >= 6400 ? 1.25 : 1);
-  let seed = (grainSeed * 2654435761) >>> 0 || 1;
-  const rand = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
-  const hist = new Uint32Array(64);
-  for (let p = 0; p < d.length; p += 4) {
-    let R = lut[d[p]], G = lut[d[p + 1]], B = lut[d[p + 2]];
-    if (sigma > .4) {
-      const k = sigma * (1.35 - (R * 3 + G * 6 + B) / 2550 * .8);
-      const n = (rand() + rand() + rand() - 1.5) * 2 * k, cn = sigma > 6 ? k * .35 : 0;
-      R += n + (rand() - .5) * cn; G += n + (rand() - .5) * cn; B += n + (rand() - .5) * cn * 1.4;
+function updateHint() {
+  const h = $('hint');
+  h.textContent = T().hint;
+  h.hidden = !(useDemo && !FILES.size && !S.hinted);
+}
+
+// ---------- render loop: demo footage + blurred surround ----------
+const bg = $('bg'), bctx = bg.getContext('2d');
+let frameN = 0;
+function loop(ts) {
+  if (!document.hidden) {
+    if (useDemo) drawDemo(ts / 1000);
+    if (R.mode === 'photo' && (frameN++ % 4 === 0)) {
+      try { if (useDemo || feed.readyState >= 2) bctx.drawImage(useDemo ? demo : feed, 0, 0, bg.width, bg.height); } catch (e) {}
     }
-    d[p] = R; d[p + 1] = G; d[p + 2] = B; d[p + 3] = 255;
-    hist[Math.min(63, ((d[p] * 3 + d[p + 1] * 6 + d[p + 2]) / 10) >> 2)]++;
   }
-  vctx.putImageData(img, 0, 0);
-  updateUI(r);
-  if (!$('histo').hidden) drawHist(hist);
+  requestAnimationFrame(loop);
 }
-let pending = false;
-function schedule() { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; render(); }); } }
 
-// ---------- dial (ruler) ----------
-const DIALS = {
-  ev:       { name: 'Экспозиция', glyph: '±', label: 'Экспоз.', values: Array.from({ length: 19 }, (_, i) => i - 9), fmt: fmtComp, major: i => (i - 9) % 3 === 0,
-              get: () => S.comp + 9, set: i => { S.comp = i - 9; }, enabled: () => !(prog() === 'M' && !S.autoIso), note: () => prog() === 'M' && !S.autoIso ? 'в ПРО включите авто‑ISO' : '' },
-  shutter:  { name: 'Выдержка', glyph: '1/s', label: 'Выдержка', values: SHUTTERS, fmt: fmtT, major: i => i % 3 === 0,
-              get: () => last.si, set: i => { S.si = i; }, enabled: () => prog() === 'M' || prog() === 'Tv', note: () => (prog() === 'M' || prog() === 'Tv') ? '' : 'авто' },
-  aperture: { name: 'Диафрагма', glyph: 'ƒ', label: 'Диафр.', values: APERTURES, fmt: fmtN, major: i => i % 3 === 0,
-              get: () => last.ai, set: i => { S.ai = i; }, enabled: () => prog() === 'M' || prog() === 'Av', note: () => (prog() === 'M' || prog() === 'Av') ? '' : 'авто' },
-  iso:      { name: 'ISO', glyph: 'ISO', label: 'ISO', values: ['A', ...ISOS], fmt: v => v === 'A' ? 'АВТО' : v, major: i => i === 0 || (i - 1) % 3 === 0,
-              get: () => S.autoIso ? 0 : nearest(ISOS, last.iso) + 1, set: i => { S.autoIso = i === 0; if (i) S.ii = i - 1; }, enabled: () => true, note: () => S.autoIso ? `сейчас ${last.iso}` : '' },
-  focus:    { name: 'Фокус', glyph: 'AF', label: 'Фокус', values: FOCI, fmt: fmtM, major: i => [0, 6, 10, 14, 18, 23].includes(i),
-              get: () => nearest(FOCI, S.focus), set: i => { S.focus = FOCI[i]; }, enabled: () => true, note: () => { const g = dof(last.N, S.focal, S.focus); return `резко ${fmtM(g.near)}–${fmtM(g.far)}`; } },
-  zoom:     { name: 'Зум', glyph: '×', label: 'Зум', values: FOCALS, fmt: v => `${fmtZ(v)} · ${v} мм`, tick: v => fmtZ(v), major: i => [0, 6, 12, 16, 23].includes(i),
-              get: () => nearest(FOCALS, S.focal), set: i => { S.focal = FOCALS[i]; }, enabled: () => true, note: () => '' },
-  light:    { name: 'Свет', glyph: '☀', label: 'Свет', values: LIGHT_KEYS, fmt: k => LIGHTS[k].name, tick: k => LIGHTS[k].name, step: 84, major: () => true,
-              get: () => LIGHT_KEYS.indexOf(S.light), set: i => { S.light = LIGHT_KEYS[i]; }, enabled: () => true, note: () => `EV ${LIGHTS[S.light].ev}` },
-  motion:   { name: 'Объект', glyph: '→', label: 'Объект', values: SPEEDS.map((_, i) => i), fmt: i => SPEEDS[i].name, tick: i => SPEEDS[i].name, step: 84, major: () => true,
-              get: () => S.speed, set: i => { S.speed = i; }, enabled: () => true, note: () => SPEEDS[S.speed].v ? `${SPEEDS[S.speed].v} м/с` : '' },
-};
-let activeDial = null, dragging = null;
-const track = $('track'), ruler = $('ruler');
-function buildTrack() {
-  const D = DIALS[activeDial], step = D.step || 16;
-  track.innerHTML = D.values.map((v, i) => {
-    const maj = D.major(i);
-    const lab = maj ? `<b>${D.tick ? D.tick(v) : D.fmt(v)}</b>` : '';
-    return `<span class="tick${maj ? ' major' : ''}" style="left:${i * step}px">${lab}</span>`;
-  }).join('');
+// ---------- zoom ----------
+const PRESETS = [.5, 1, 2];
+function zoomScale() {
+  const z = R.zoom, base = z < 1 ? 1 + (z - .5) * .3 : 1.15 * z;
+  if (R.mode !== 'video') return base;
+  return S.zoomVideo ? base * 1.08 : Math.max(1, base / 1.15);
 }
-function placeTrack(idx, animate) {
-  const D = DIALS[activeDial], step = D.step || 16;
-  track.style.transition = animate ? 'transform .2s ease' : 'none';
-  track.style.transform = `translateX(${-idx * step}px)`;
-}
-function openDial(key) {
-  activeDial = activeDial === key ? null : key;
-  $('dial').hidden = !activeDial;
-  if (activeDial) { buildTrack(); ruler.setAttribute('aria-label', DIALS[activeDial].name); }
-  syncTools(); updateDial(true);
-}
-function updateDial(animate) {
-  if (!activeDial || !last) return;
-  const D = DIALS[activeDial], i = D.get();
-  $('dialName').textContent = D.name;
-  $('dialVal').textContent = D.fmt(D.values[i]);
-  $('dialNote').textContent = D.note();
-  ruler.classList.toggle('off', !D.enabled());
-  ruler.setAttribute('aria-valuetext', D.fmt(D.values[i]));
-  if (!dragging) placeTrack(i, animate);
-}
-function setDial(i) {
-  const D = DIALS[activeDial];
-  i = clamp(i, 0, D.values.length - 1);
-  if (i === D.get()) return;
-  D.set(i); schedule();
-}
-ruler.addEventListener('pointerdown', e => {
-  if (!activeDial || !DIALS[activeDial].enabled()) { toast('В этом режиме значение выбирает камера'); return; }
-  ruler.setPointerCapture(e.pointerId);
-  dragging = { x: e.clientX, i: DIALS[activeDial].get() };
-});
-ruler.addEventListener('pointermove', e => {
-  if (!dragging) return;
-  const D = DIALS[activeDial], step = D.step || 16, dx = e.clientX - dragging.x;
-  track.style.transition = 'none';
-  const pos = clamp(dragging.i * step - dx, 0, (D.values.length - 1) * step);
-  track.style.transform = `translateX(${-pos}px)`;
-  setDial(Math.round(pos / step));
-});
-const endDrag = () => { if (dragging) { dragging = null; updateDial(true); } };
-ruler.addEventListener('pointerup', endDrag); ruler.addEventListener('pointercancel', endDrag);
-ruler.addEventListener('wheel', e => { if (!activeDial || !DIALS[activeDial].enabled()) return; e.preventDefault(); setDial(DIALS[activeDial].get() + Math.sign(e.deltaY || e.deltaX)); }, { passive: false });
-ruler.addEventListener('keydown', e => {
-  if (!activeDial || !DIALS[activeDial].enabled()) return;
-  if (e.key === 'ArrowLeft') { setDial(DIALS[activeDial].get() - 1); e.preventDefault(); }
-  if (e.key === 'ArrowRight') { setDial(DIALS[activeDial].get() + 1); e.preventDefault(); }
-});
-
-// tools row
-const TOOL_KEYS = ['ev', 'shutter', 'aperture', 'iso', 'focus', 'zoom', 'light', 'motion', 'tripod', 'grid'];
-$('tools').innerHTML = TOOL_KEYS.map(k => {
-  const D = DIALS[k];
-  const glyph = D ? D.glyph : k === 'tripod' ? '⊥' : '#';
-  const label = D ? D.label : k === 'tripod' ? 'Штатив' : 'Сетка';
-  return `<button type="button" class="tool" data-k="${k}" aria-pressed="false"><span class="ring">${glyph}</span><span>${label}</span></button>`;
-}).join('');
-$('tools').addEventListener('click', e => {
-  const b = e.target.closest('.tool'); if (!b) return;
-  const k = b.dataset.k;
-  if (k === 'tripod') { S.tripod = !S.tripod; toast(S.tripod ? 'Штатив: камера неподвижна' : 'Съёмка с рук'); schedule(); }
-  else if (k === 'grid') { S.grid = !S.grid; $('gridlines').hidden = !S.grid; }
-  else openDial(k);
-  syncTools();
-});
-function syncTools() {
-  document.querySelectorAll('.tool').forEach(b => {
-    const k = b.dataset.k;
-    b.setAttribute('aria-pressed', k === activeDial || (k === 'tripod' && S.tripod) || (k === 'grid' && S.grid));
-    b.classList.toggle('on', (k === 'ev' && S.comp !== 0) || (k === 'iso' && !S.autoIso) || (k === 'focus' && S.focus !== SUBJECT_D));
+function applyZoom() {
+  media.style.setProperty('--zs', zoomScale().toFixed(4));
+  const zb = $('zoom');
+  if (!zb.children.length) zb.innerHTML = PRESETS.map(p => `<button type="button" data-z="${p}"></button>`).join('');
+  let act = 0; PRESETS.forEach((p, i) => { if (R.zoom >= p - 1e-6) act = i; });
+  [...zb.children].forEach((b, i) => {
+    const on = i === act;
+    b.classList.toggle('on', on);
+    b.textContent = on ? numFmt.format(Math.round(R.zoom * 10) / 10) + '×' : numFmt.format(PRESETS[i]);
+    b.setAttribute('aria-label', `${numFmt.format(PRESETS[i])}×`);
   });
 }
-$('chev').addEventListener('click', () => {
-  const open = $('tools').hidden;
-  $('tools').hidden = !open; $('chev').setAttribute('aria-expanded', open);
-  if (!open && activeDial) openDial(activeDial);
+$('zoom').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const z = +b.dataset.z;
+  if (Math.abs(z - R.zoom) < .01) return;
+  if ((z < 1) !== (R.zoom < 1)) lensSwitch();
+  R.zoom = z; applyZoom();
 });
+function lensSwitch() { media.classList.add('switching'); setTimeout(() => media.classList.remove('switching'), 180); }
 
-// zoom pills
-const PILLS = [13, 26, 52, 77];
-$('zoom').innerHTML = PILLS.map(f => `<button type="button" data-f="${f}">${fmtZ(f).replace('×', '')}</button>`).join('');
-$('zoom').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.focal = +b.dataset.f; schedule(); });
-function syncZoom() {
-  let act = 0; PILLS.forEach((f, i) => { if (S.focal >= f) act = i; });
-  [...$('zoom').children].forEach((b, i) => {
-    b.classList.toggle('on', i === act);
-    b.textContent = i === act ? fmtZ(S.focal) : fmtZ(PILLS[i]).replace('×', '');
+// ---------- modes ----------
+function placeModeHl() {
+  const btn = document.querySelector(`#modes button[data-m="${R.mode}"]`), hl = $('modeHl');
+  if (!btn) return;
+  hl.style.left = btn.offsetLeft + 'px'; hl.style.width = btn.offsetWidth + 'px';
+}
+function setMode(m) {
+  if (m === R.mode || R.recording) return;
+  R.mode = m;
+  app.classList.toggle('photo', m === 'photo'); app.classList.toggle('video', m === 'video');
+  document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === m));
+  $('shutter').setAttribute('aria-label', m === 'photo' ? 'Take photo' : 'Record video');
+  media.classList.add('switching'); setTimeout(() => media.classList.remove('switching'), 300);
+  closeMore(); placeModeHl(); applyZoom();
+}
+$('modes').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
+function applyText() {
+  const t = T();
+  document.querySelector('#modes [data-m="video"]').textContent = t.video;
+  document.querySelector('#modes [data-m="photo"]').textContent = t.photo;
+  document.querySelectorAll('#morePanel [data-i]').forEach(el => { el.textContent = t[el.dataset.i]; });
+  $('lockTag').textContent = t.lock;
+  syncMore(); updateHint(); requestAnimationFrame(placeModeHl);
+}
+
+// ---------- top controls ----------
+function setSlash(btn, on) { btn.querySelector('.slash').style.display = on ? 'none' : ''; btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', on); }
+$('flashBtn').addEventListener('click', () => { R.flash = !R.flash; setSlash($('flashBtn'), R.flash); });
+$('liveBtn').addEventListener('click', () => { R.live = !R.live; setSlash($('liveBtn'), R.live); });
+$('resBtn').addEventListener('click', () => { R.res = R.res === 'HD' ? '4K' : 'HD'; $('resTxt').textContent = R.res; });
+$('fpsBtn').addEventListener('click', () => { R.fps = R.fps === 30 ? 60 : 30; $('fpsTxt').textContent = R.fps; });
+function closeMore() { $('morePanel').hidden = true; $('moreBtn').setAttribute('aria-expanded', 'false'); $('moreBtn').classList.remove('on'); }
+$('moreBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  const open = $('morePanel').hidden;
+  $('morePanel').hidden = !open; $('moreBtn').setAttribute('aria-expanded', open); $('moreBtn').classList.toggle('on', open);
+});
+function syncMore() {
+  const t = T();
+  $('timerVal').textContent = S.timer ? S.timer + t.s : t.off;
+  $('gridVal').textContent = S.grid ? t.on : t.off;
+  $('soundVal').textContent = S.sound ? t.on : t.off;
+  $('grid').hidden = !S.grid;
+}
+$('timerBtn').addEventListener('click', () => { S.timer = S.timer === 0 ? 3 : S.timer === 3 ? 10 : 0; save(); syncMore(); });
+$('gridBtn').addEventListener('click', () => { S.grid = !S.grid; save(); syncMore(); });
+$('soundBtn').addEventListener('click', () => { S.sound = !S.sound; save(); syncMore(); $('optSound').checked = S.sound; });
+document.addEventListener('click', e => { if (!$('morePanel').hidden && !e.target.closest('#morePanel')) closeMore(); });
+
+// ---------- sounds (synthesised) ----------
+let actx = null;
+function unlockAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+}
+function click(times = [0, .07], vol = .5) {
+  if (!S.sound || !actx) return;
+  const sr = actx.sampleRate, len = Math.floor(sr * .045);
+  const buf = actx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * .006));
+  times.forEach((dt, k) => {
+    const s = actx.createBufferSource(); s.buffer = buf;
+    const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = k ? 2400 : 3600; f.Q.value = .9;
+    const gn = actx.createGain(); gn.gain.value = vol * (k ? .7 : 1);
+    s.connect(f); f.connect(gn); gn.connect(actx.destination);
+    s.start(actx.currentTime + dt);
   });
 }
-
-// modes carousel
-const modeTrack = $('modeTrack');
-modeTrack.innerHTML = MODES.map(m => `<button type="button" data-m="${m.key}">${m.label}</button>`).join('');
-function setMode(key) {
-  if (last) { S.si = last.si; S.ai = last.ai; }
-  S.mode = key;
-  if (key === 'port') { S.ai = APERTURES.indexOf(1.8); S.focal = Math.max(S.focal, 52); S.focus = SUBJECT_D; toast('Портрет: ƒ1.8, фон размыт'); }
-  if (key === 'photo') { S.autoIso = true; }
-  schedule(); syncModes();
+function beep(freq, dur = .12) {
+  if (!S.sound || !actx) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.frequency.value = freq; g.gain.setValueAtTime(.18, actx.currentTime); g.gain.exponentialRampToValueAtTime(.001, actx.currentTime + dur);
+  o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + dur);
 }
-function syncModes() {
-  const btns = [...modeTrack.children];
-  btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.m === S.mode));
-  const b = btns.find(b => b.dataset.m === S.mode), w = $('modes').clientWidth;
-  modeTrack.style.transform = `translateX(${w / 2 - (b.offsetLeft + b.offsetWidth / 2)}px)`;
-}
-modeTrack.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
-function stepMode(dir) { const i = MODES.findIndex(m => m.key === S.mode); const n = MODES[clamp(i + dir, 0, MODES.length - 1)]; if (n.key !== S.mode) setMode(n.key); }
-let mSwipe = null;
-$('modes').addEventListener('pointerdown', e => { mSwipe = e.clientX; });
-$('modes').addEventListener('pointerup', e => { if (mSwipe !== null && Math.abs(e.clientX - mSwipe) > 30) stepMode(e.clientX < mSwipe ? 1 : -1); mSwipe = null; });
-addEventListener('resize', () => { syncModes(); });
 
-// viewfinder: tap to focus, vertical drag for exposure, horizontal swipe for modes
-const vf = $('vf'), af = $('af');
-let vfPtr = null, afTimer = 0;
+// ---------- capture ----------
+function grab(maxSide = 1600) {
+  const src = useDemo ? demo : feed;
+  const sw = useDemo ? demo.width : feed.videoWidth, sh = useDemo ? demo.height : feed.videoHeight;
+  if (!sw || !sh) return null;
+  const r = vf.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  const k = Math.min(3, maxSide / Math.max(r.width, r.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(r.width * k); c.height = Math.round(r.height * k);
+  const x = c.getContext('2d');
+  const s = Math.max(c.width / sw, c.height / sh) * zoomScale();
+  if (R.exposure) x.filter = `brightness(${(1 + R.exposure * .6).toFixed(2)})`;
+  x.drawImage(src, (c.width - sw * s) / 2, (c.height - sh * s) / 2, sw * s, sh * s);
+  return c;
+}
+function toURL(c) { return new Promise(res => c.toBlob(b => res(b ? URL.createObjectURL(b) : c.toDataURL('image/jpeg', .9)), 'image/jpeg', .9)); }
+async function addShot(kind, dur = 0) {
+  const c = grab(); if (!c) return;
+  const url = await toURL(c);
+  R.shots.unshift({ url, kind, dur, at: new Date() });
+  setThumb(url, true);
+}
+function setThumb(src, animate) {
+  const img = $('thumbImg'); img.src = src || ''; img.hidden = !src;
+  if (animate) { const tb = $('thumb'); tb.classList.remove('pop'); void tb.offsetWidth; tb.classList.add('pop'); }
+}
+function blink() { const b = $('blink'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go'); }
+
+async function takePhoto() {
+  if (R.busy) return;
+  closeMore();
+  if (S.timer) {
+    R.busy = true;
+    const cd = $('countdown'); cd.hidden = false;
+    for (let n = S.timer; n > 0; n--) { cd.textContent = n; beep(880, .08); await new Promise(r => setTimeout(r, 1000)); }
+    cd.hidden = true; R.busy = false;
+  }
+  click(); blink(); addShot('photo');
+}
+
+// ---------- recording ----------
+let recTick = 0;
+const fmtClock = ms => { const s = Math.floor(ms / 1000); return [s / 3600 | 0, (s / 60 | 0) % 60, s % 60].map(v => String(v).padStart(2, '0')).join(':'); };
+function recElapsed() { return R.recAcc + (R.paused ? 0 : Date.now() - R.recFrom); }
+function startRec() {
+  R.recording = true; R.paused = false; R.recAcc = 0; R.recFrom = Date.now();
+  app.classList.add('recording'); closeMore();
+  $('shutter').setAttribute('aria-label', 'Stop recording');
+  beep(1320, .1);
+  $('recTimer').textContent = '00:00:00';
+  recTick = setInterval(() => { $('recTimer').textContent = fmtClock(recElapsed()); }, 200);
+  setPauseIcon();
+}
+function stopRec() {
+  const dur = recElapsed();
+  clearInterval(recTick);
+  R.recording = false; R.paused = false;
+  app.classList.remove('recording');
+  $('shutter').setAttribute('aria-label', 'Record video');
+  beep(990, .1);
+  addShot('video', dur);
+}
+function setPauseIcon() {
+  $('pauseIco').innerHTML = R.paused
+    ? '<circle cx="9" cy="9" r="6.5" fill="#ff3b30"/>'
+    : '<rect x="3" y="2" width="4" height="14" rx="1.2"/><rect x="11" y="2" width="4" height="14" rx="1.2"/>';
+  $('pauseBtn').setAttribute('aria-label', R.paused ? 'Resume' : 'Pause');
+}
+$('pauseBtn').addEventListener('click', () => {
+  if (!R.recording) return;
+  if (R.paused) { R.paused = false; R.recFrom = Date.now(); } else { R.recAcc += Date.now() - R.recFrom; R.paused = true; }
+  setPauseIcon();
+});
+$('stillBtn').addEventListener('click', () => { if (R.recording) { click([0], .35); blink(); addShot('photo'); } });
+$('shutter').addEventListener('click', () => {
+  if (R.mode === 'photo') takePhoto();
+  else if (R.recording) stopRec();
+  else startRec();
+});
+document.addEventListener('keydown', e => {
+  if (!$('viewer').hidden || $('sheet').classList.contains('on')) return;
+  if (e.code === 'Space') { e.preventDefault(); $('shutter').click(); }
+});
+
+// ---------- switch camera ----------
+$('flipBtn').addEventListener('click', () => {
+  if (R.recording) return;
+  const ico = $('flipBtn').querySelector('svg');
+  ico.style.transform = ico.style.transform ? '' : 'rotate(180deg)';
+  const zs = zoomScale(), dur = 230, ease = 'cubic-bezier(.4,0,.6,1)';
+  const out = media.animate([
+    { transform: `perspective(900px) rotateY(0deg) scale(${zs})`, filter: 'blur(0px)' },
+    { transform: `perspective(900px) rotateY(90deg) scale(${zs})`, filter: 'blur(18px)' }], { duration: dur, easing: ease, fill: 'forwards' });
+  out.onfinish = () => {
+    R.cam = R.cam === 'back' ? 'front' : 'back';
+    applySource();
+    const back = media.animate([
+      { transform: `perspective(900px) rotateY(-90deg) scale(${zs})`, filter: 'blur(18px)' },
+      { transform: `perspective(900px) rotateY(0deg) scale(${zs})`, filter: 'blur(0px)' }], { duration: dur + 60, easing: ease });
+    back.onfinish = () => out.cancel();
+    out.cancel();
+  };
+});
+
+// ---------- viewfinder gestures: tap to focus, drag for exposure, pinch to zoom, swipe for mode ----------
+const focus = $('focus');
+const ptrs = new Map();
+let g = null, focusTimer = 0, lpTimer = 0;
+function showFocus(x, y) {
+  focus.style.left = x + 'px'; focus.style.top = y + 'px';
+  focus.classList.remove('dim', 'pop'); void focus.offsetWidth; focus.classList.add('on', 'pop');
+  armFocusFade();
+}
+function armFocusFade() { clearTimeout(focusTimer); focusTimer = setTimeout(() => { focus.classList.add('dim'); focus.classList.remove('adjusting'); }, 1800); }
+function setExposure(v) {
+  R.exposure = clamp(v, -1, 1);
+  media.style.filter = R.exposure ? `brightness(${(1 + R.exposure * .6).toFixed(2)})` : '';
+  $('sun').style.transform = `translateY(${-R.exposure * 34}px)`;
+}
 vf.addEventListener('pointerdown', e => {
-  if (e.target.closest('.overlay')) return;
   vf.setPointerCapture(e.pointerId);
-  vfPtr = { x: e.clientX, y: e.clientY, comp: S.comp, moved: null };
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  closeMore();
+  if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()];
+    g = { pinch: true, d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: R.zoom };
+    clearTimeout(lpTimer); return;
+  }
+  const r = vf.getBoundingClientRect();
+  g = { x: e.clientX, y: e.clientY, lx: e.clientX - r.left, ly: e.clientY - r.top, moved: null, e0: R.exposure };
+  clearTimeout(lpTimer);
+  lpTimer = setTimeout(() => {
+    if (!g || g.moved || g.pinch) return;
+    g.moved = 'lock'; showFocus(g.lx, g.ly); clearTimeout(focusTimer);
+    const tag = $('lockTag'); tag.hidden = false; clearTimeout(tag._t); tag._t = setTimeout(() => { tag.hidden = true; }, 2200);
+  }, 650);
 });
 vf.addEventListener('pointermove', e => {
-  if (!vfPtr) return;
-  const dx = e.clientX - vfPtr.x, dy = e.clientY - vfPtr.y;
-  if (!vfPtr.moved && Math.hypot(dx, dy) > 10) vfPtr.moved = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
-  if (vfPtr.moved === 'v' && DIALS.ev.enabled()) {
-    const c = clamp(vfPtr.comp - Math.round(dy / 14), -9, 9);
-    if (c !== S.comp) { S.comp = c; schedule(); }
-    af.classList.remove('dim'); clearTimeout(afTimer); afTimer = setTimeout(() => af.classList.add('dim'), 2000);
-  }
-});
-vf.addEventListener('pointerup', e => {
-  if (!vfPtr) return;
-  const p = vfPtr; vfPtr = null;
-  if (p.moved === 'h' && Math.abs(e.clientX - p.x) > 50) { stepMode(e.clientX < p.x ? 1 : -1); return; }
-  if (p.moved) return;
-  const rc = vf.getBoundingClientRect();
-  const u = (e.clientX - rc.left) / rc.width, v = (e.clientY - rc.top) / rc.height;
-  const cx = clamp(Math.round(u * W), 0, W - 1), cy = clamp(Math.round(v * H), 0, H - 1);
-  let hit = LAYERS[0];
-  for (const key of ['fore', 'person', 'fence', 'mid']) {
-    const l = LAYERS.find(l => l.key === key);
-    if (l.ctx.getImageData(cx, cy, 1, 1).data[3] > 40) { hit = l; break; }
-  }
-  S.focus = hit.d >= 1000 ? Infinity : hit.d;
-  S.comp = DIALS.ev.enabled() ? 0 : S.comp;
-  af.style.left = `${u * 100}%`; af.style.top = `${v * 100}%`;
-  af.classList.remove('dim', 'pop'); void af.offsetWidth; af.classList.add('pop');
-  clearTimeout(afTimer); afTimer = setTimeout(() => af.classList.add('dim'), 2000);
-  schedule();
-});
-let lpTimer = 0;
-vf.addEventListener('pointerdown', e => { if (e.target.closest('.overlay')) return; clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (vfPtr && !vfPtr.moved) { $('afTag').hidden = false; setTimeout(() => $('afTag').hidden = true, 1800); } }, 650); });
-vf.addEventListener('pointerup', () => clearTimeout(lpTimer));
-
-// top bar buttons
-$('flashBtn').addEventListener('click', () => {
-  S.flash = !S.flash;
-  $('flashBtn').classList.toggle('on', S.flash); $('flashBtn').setAttribute('aria-pressed', S.flash);
-  toast(S.flash ? 'Вспышка вкл.' : 'Вспышка выкл.'); schedule();
-});
-$('histBtn').addEventListener('click', () => {
-  const h = $('histo'); h.hidden = !h.hidden;
-  $('histBtn').classList.toggle('on', !h.hidden); $('histBtn').setAttribute('aria-pressed', !h.hidden); schedule();
-});
-$('cycleBtn').addEventListener('click', () => {
-  S.light = LIGHT_KEYS[(LIGHT_KEYS.indexOf(S.light) + 1) % LIGHT_KEYS.length];
-  toast(`${LIGHTS[S.light].name} · EV ${LIGHTS[S.light].ev}`); schedule();
-});
-
-let toastTimer = 0;
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1400); }
-
-// ---------- per-frame UI ----------
-function updateUI(r) {
-  const P = prog();
-  const aT = P === 'Av' || P === 'P', aN = P === 'Tv' || P === 'P';
-  const o = r.offset, bad = Math.abs(o) > .6;
-  $('readout').innerHTML =
-    `<span class="${aT ? 'auto' : ''}">${fmtT(r.t)}</span><span class="${aN ? 'auto' : ''}">${fmtN(r.N)}</span>` +
-    `<span class="${S.autoIso ? 'auto' : ''}">ISO ${r.iso}</span><span>${S.focal} мм</span>` +
-    `<span class="meter${bad ? ' bad' : ''}">${o > -.05 ? '+' : '−'}${Math.abs(o).toFixed(1)} EV</span>`;
-  $('sun').style.top = `${clamp(50 - S.comp * 5, 0, 100)}%`;
-  syncZoom(); syncTools(); updateDial(false);
-
-  let hint = '';
-  if (o > 1.7) hint = '<b>Пересвет.</b> Короче выдержка, закрыть диафрагму или ниже ISO';
-  else if (o < -1.7) hint = '<b>Недосвет.</b> Длиннее выдержка, открыть диафрагму или выше ISO';
-  else if ((info.motion || 0) > 3) {
-    const need = SHUTTERS.find(t => S.focal * SPEEDS[S.speed].v * t / SUBJECT_D * PXMM < 2) || 1 / 8000;
-    hint = `<b>Смаз движения.</b> Нужна выдержка ${fmtT(need)} или короче`;
-  }
-  else if (info.shake > 2) hint = `<b>Шевелёнка.</b> Выдержка длиннее 1/${S.focal} с — нужен штатив`;
-  else if (info.person > 4) hint = '<b>Человек не в фокусе.</b> Коснитесь его на экране';
-  else if (r.iso >= 3200) hint = `<b>Шум.</b> ISO ${r.iso}`;
-  else if (S.mode === 'port' && info.far > 12) hint = 'Портрет · фон размыт';
-  $('hint').innerHTML = hint; $('hint').hidden = !hint;
-}
-function drawHist(hist) {
-  const c = $('histo'), x = c.getContext('2d'), w = c.width, h = c.height;
-  x.clearRect(0, 0, w, h);
-  let max = 1; for (let i = 1; i < 63; i++) max = Math.max(max, hist[i]);
-  x.fillStyle = 'rgba(255,255,255,.8)';
-  for (let i = 0; i < 64; i++) { const v = Math.min(1, hist[i] / max) * (h - 12); x.fillRect(8 + i * (w - 16) / 64, h - 6 - v, (w - 16) / 64 - 1, v); }
-}
-
-// ---------- shooting + gallery ----------
-const shots = [];
-let gIdx = 0;
-function shoot() {
-  shakeAngle = Math.random() * Math.PI; grainSeed = (Math.random() * 1e9) | 0;
-  render();
-  const bo = $('blackout'); bo.classList.remove('go'); void bo.offsetWidth; bo.classList.add('go');
-  shots.unshift({ src: view.toDataURL('image/jpeg', .9), cap: `${fmtT(last.t)} · ${fmtN(last.N)} · ISO ${last.iso} · ${S.focal} мм · ${LIGHTS[S.light].name}` });
-  if (shots.length > 30) shots.pop();
-  const ti = $('thumbImg'); ti.src = shots[0].src; ti.hidden = false;
-  const tb = $('thumb'); tb.classList.remove('pop'); void tb.offsetWidth; tb.classList.add('pop');
-}
-function showGallery(i) {
-  gIdx = i;
-  $('gallery').hidden = false;
-  $('gEmpty').hidden = shots.length > 0; $('gImg').hidden = !shots.length;
-  $('gCount').textContent = shots.length ? `${i + 1} из ${shots.length}` : '';
-  if (shots.length) { $('gImg').src = shots[i].src; $('gImg').alt = shots[i].cap; $('gCap').textContent = shots[i].cap; } else $('gCap').textContent = '';
-  $('gStrip').innerHTML = shots.map((s, k) => `<button type="button" class="${k === i ? 'on' : ''}" data-i="${k}" aria-label="Снимок ${k + 1}"><img src="${s.src}" alt=""></button>`).join('');
-}
-$('shoot').addEventListener('click', shoot);
-$('thumb').addEventListener('click', () => showGallery(0));
-$('gDone').addEventListener('click', () => { $('gallery').hidden = true; });
-$('gStrip').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showGallery(+b.dataset.i); });
-document.addEventListener('keydown', e => {
-  if (!$('gallery').hidden) {
-    if (e.key === 'Escape') $('gallery').hidden = true;
-    if (e.key === 'ArrowRight' && gIdx < shots.length - 1) showGallery(gIdx + 1);
-    if (e.key === 'ArrowLeft' && gIdx > 0) showGallery(gIdx - 1);
+  if (!ptrs.has(e.pointerId) || !g) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (g.pinch) {
+    if (ptrs.size < 2) return;
+    const [a, b] = [...ptrs.values()];
+    const z = clamp(g.z0 * Math.hypot(a.x - b.x, a.y - b.y) / g.d0, .5, 10);
+    if ((z < 1) !== (R.zoom < 1)) lensSwitch();
+    R.zoom = z; media.style.transition = 'none'; applyZoom();
     return;
   }
-  if (document.activeElement === ruler) return;
-  if (e.code === 'Space' || e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); shoot(); }
+  const dx = e.clientX - g.x, dy = e.clientY - g.y;
+  if (!g.moved && Math.hypot(dx, dy) > 10) { g.moved = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h'; clearTimeout(lpTimer); }
+  if (g.moved === 'v') {
+    if (!focus.classList.contains('on')) showFocus(vf.clientWidth / 2, vf.clientHeight / 2);
+    focus.classList.remove('dim'); focus.classList.add('adjusting');
+    setExposure(g.e0 - dy / 180); armFocusFade();
+  }
+});
+function endPtr(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId);
+  clearTimeout(lpTimer);
+  if (!g) return;
+  if (g.pinch) { if (!ptrs.size) { media.style.transition = ''; g = null; } return; }
+  const dx = e.clientX - g.x;
+  if (g.moved === 'h' && Math.abs(dx) > 50) setMode(dx < 0 ? 'photo' : 'video');
+  else if (!g.moved && e.type === 'pointerup') { setExposure(0); showFocus(g.lx, g.ly); $('lockTag').hidden = true; }
+  g = null;
+}
+vf.addEventListener('pointerup', endPtr); vf.addEventListener('pointercancel', endPtr);
+
+// ---------- hold the top of the screen to open settings ----------
+let holdT = 0, holdStart = null, swallowClick = false;
+addEventListener('pointerdown', e => {
+  if ($('sheet').classList.contains('on') || !$('viewer').hidden || R.recording) return;
+  const st = parseFloat(app.style.getPropertyValue('--st')) || 0;
+  if (e.clientY > st + 64) return;
+  holdStart = { x: e.clientX, y: e.clientY };
+  clearTimeout(holdT);
+  holdT = setTimeout(() => { holdStart = null; swallowClick = true; openSheet(); }, 700);
+}, { capture: true });
+addEventListener('pointermove', e => { if (holdStart && Math.hypot(e.clientX - holdStart.x, e.clientY - holdStart.y) > 12) { clearTimeout(holdT); holdStart = null; } }, { capture: true });
+addEventListener('pointerup', () => { clearTimeout(holdT); holdStart = null; setTimeout(() => { swallowClick = false; }, 50); }, { capture: true });
+addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, { capture: true });
+addEventListener('contextmenu', e => e.preventDefault());
+
+// ---------- settings sheet ----------
+function openSheet() {
+  if (R.recording) return;
+  closeMore();
+  S.hinted = true; save(); updateHint();
+  renderTiles();
+  $('optLoop').checked = S.loop; $('optRestart').checked = S.restart; $('optZoom').checked = S.zoomVideo; $('optSound').checked = S.sound;
+  document.querySelectorAll('#langSeg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.l === S.lang));
+  $('sheet').classList.add('on'); $('sheet').setAttribute('aria-hidden', 'false');
+  $('backdrop').classList.add('on'); app.classList.add('sheet-open');
+}
+function closeSheet() {
+  $('sheet').classList.remove('on'); $('sheet').setAttribute('aria-hidden', 'true');
+  $('backdrop').classList.remove('on'); app.classList.remove('sheet-open');
+}
+$('doneBtn').addEventListener('click', closeSheet);
+$('backdrop').addEventListener('click', closeSheet);
+(() => { // drag the sheet header down to close
+  let y0 = null;
+  const sh = $('sheet'), hd = sh.querySelector('header');
+  hd.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; y0 = e.clientY; hd.setPointerCapture(e.pointerId); sh.style.transition = 'none'; });
+  hd.addEventListener('pointermove', e => { if (y0 !== null) sh.style.transform = `translate(-50%, ${Math.max(0, e.clientY - y0)}px)`; });
+  const end = e => { if (y0 === null) return; const d = e.clientY - y0; y0 = null; sh.style.transition = ''; sh.style.transform = ''; if (d > 90) closeSheet(); };
+  hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', end);
+})();
+
+$('optLoop').addEventListener('change', e => { S.loop = e.target.checked; feed.loop = S.loop; if (S.loop && feed.ended) feed.play().catch(() => {}); save(); });
+$('optRestart').addEventListener('change', e => { S.restart = e.target.checked; save(); });
+$('optZoom').addEventListener('change', e => { S.zoomVideo = e.target.checked; save(); applyZoom(); });
+$('optSound').addEventListener('change', e => { S.sound = e.target.checked; save(); syncMore(); });
+$('langSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.lang = b.dataset.l; save();
+  document.querySelectorAll('#langSeg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  applyText();
 });
 
-render();
-syncModes();
+const X_ICON = '<svg viewBox="0 0 10 10" stroke="#fff" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>';
+const fmtDur = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : '';
+let pickKind = 'back';
+function renderTiles() {
+  for (const kind of ['back', 'front', 'gallery']) {
+    const box = $('tiles-' + kind);
+    const items = [...FILES.values()].filter(f => f.kind === kind).sort((a, b) => a.added - b.added);
+    const selId = kind === 'back' ? S.backId : kind === 'front' ? S.frontId : null;
+    let html = (kind === 'gallery' && items.length) ? '' : `<button type="button" class="tile add" data-add="${kind}" aria-label="Добавить"><i>+</i></button>`;
+    html += items.map(f => `<div class="tile${f.id === selId || kind === 'gallery' ? ' sel' : ''}${f.busy ? ' busy' : ''}" data-id="${f.id}" role="button" tabindex="0">` +
+      (f.thumb ? `<img src="${f.thumb}" alt="">` : '') + (f.dur ? `<span class="dur">${fmtDur(f.dur)}</span>` : '') +
+      `<button type="button" class="x" data-del="${f.id}" aria-label="Удалить">${X_ICON}</button></div>`).join('');
+    box.innerHTML = html;
+  }
+}
+document.querySelector('.sheet .body').addEventListener('click', async e => {
+  const add = e.target.closest('[data-add]'), del = e.target.closest('[data-del]'), tile = e.target.closest('.tile[data-id]'), reset = e.target.closest('[data-reset]');
+  if (add) {
+    pickKind = add.dataset.add;
+    (pickKind === 'gallery' ? $('imgPick') : $('filePick')).click();
+  } else if (del) {
+    await removeFile(del.dataset.del);
+  } else if (tile) {
+    const f = FILES.get(tile.dataset.id); if (!f || f.kind === 'gallery' || f.busy) return;
+    if (f.kind === 'back') S.backId = f.id; else S.frontId = f.id;
+    save(); renderTiles(); applySource();
+  } else if (reset) {
+    const kind = reset.dataset.reset;
+    for (const f of [...FILES.values()]) if (f.kind === kind) await removeFile(f.id, true);
+    renderTiles(); applySource(); refreshThumb();
+  }
+});
+async function removeFile(id, quiet) {
+  const f = FILES.get(id); if (!f) return;
+  FILES.delete(id);
+  try { await idb('readwrite', s => s.delete(id)); } catch (e) {}
+  delete S.times[id];
+  if (S.backId === id) S.backId = [...FILES.values()].find(x => x.kind === 'back')?.id || null;
+  if (S.frontId === id) S.frontId = [...FILES.values()].find(x => x.kind === 'front')?.id || null;
+  save();
+  if (!quiet) { renderTiles(); applySource(); refreshThumb(); }
+}
+
+function videoInfo(blob) {
+  return new Promise(res => {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+    const url = URL.createObjectURL(blob);
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
+      let thumb = '';
+      try {
+        if (v.videoWidth) {
+          const c = document.createElement('canvas'), k = 300 / Math.max(v.videoWidth, v.videoHeight);
+          c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+          c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+          thumb = c.toDataURL('image/jpeg', .75);
+        }
+      } catch (e) {}
+      const dur = isFinite(v.duration) ? v.duration : 0;
+      v.pause(); v.removeAttribute('src'); v.load(); URL.revokeObjectURL(url);
+      res({ thumb, dur });
+    };
+    v.addEventListener('loadedmetadata', () => { try { v.currentTime = Math.min(.15, (v.duration || 1) / 3); } catch (e) {} });
+    v.addEventListener('seeked', () => setTimeout(finish, 60));
+    setTimeout(finish, 6000);
+    v.src = url; v.load();
+    const p = v.play(); if (p) p.then(() => v.pause()).catch(() => {});
+  });
+}
+function imageThumb(blob) {
+  return new Promise(res => {
+    const img = new Image(), url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const c = document.createElement('canvas'), k = 400 / Math.max(img.naturalWidth, img.naturalHeight);
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', .85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(''); };
+    img.src = url;
+  });
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+$('filePick').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  const kind = pickKind;
+  for (const file of files) {
+    const rec = { id: newId(), kind, blob: file, thumb: '', dur: 0, added: Date.now(), busy: true };
+    FILES.set(rec.id, rec); renderTiles();
+    Object.assign(rec, await videoInfo(file)); delete rec.busy;
+    try { await idb('readwrite', s => s.put({ id: rec.id, kind, blob: file, thumb: rec.thumb, dur: rec.dur, added: rec.added })); } catch (err) {}
+    if (kind === 'back') S.backId = rec.id; else S.frontId = rec.id;
+    save(); renderTiles(); applySource();
+  }
+});
+$('imgPick').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  for (const f of [...FILES.values()]) if (f.kind === 'gallery') await removeFile(f.id, true);
+  const rec = { id: newId(), kind: 'gallery', blob: file, thumb: await imageThumb(file), added: Date.now() };
+  FILES.set(rec.id, rec);
+  try { await idb('readwrite', s => s.put(rec)); } catch (err) {}
+  renderTiles(); refreshThumb();
+});
+function galleryPhoto() { return [...FILES.values()].find(f => f.kind === 'gallery'); }
+function refreshThumb() {
+  if (R.shots.length) return setThumb(R.shots[0].url);
+  const gp = galleryPhoto();
+  if (gp) return setThumb(gp.thumb);
+  const c = grab(200); setThumb(c ? c.toDataURL('image/jpeg', .8) : '');
+}
+
+// ---------- photo viewer ----------
+let vIdx = 0, gpURL = null;
+function viewItems() {
+  const items = R.shots.map(s => ({ src: s.url, kind: s.kind, at: s.at }));
+  const gp = galleryPhoto();
+  if (gp) { if (!gpURL) gpURL = URL.createObjectURL(gp.blob); items.push({ src: gpURL, kind: 'photo', at: new Date(gp.added) }); }
+  return items;
+}
+function openViewer(i) {
+  const items = viewItems(); if (!items.length) return;
+  vIdx = clamp(i, 0, items.length - 1);
+  const it = items[vIdx], t = T();
+  $('vImg').src = it.src; $('vPlay').hidden = it.kind !== 'video';
+  const time = it.at.toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' });
+  $('vTitle').innerHTML = `${t.today}<small>${time}</small>`;
+  $('vStrip').innerHTML = items.map((x, k) => `<button type="button" class="${k === vIdx ? 'on' : ''}" data-i="${k}"><img src="${x.src}" alt=""></button>`).join('');
+  $('viewer').hidden = false;
+}
+$('thumb').addEventListener('click', () => { if (!R.recording) { if (gpURL) { URL.revokeObjectURL(gpURL); gpURL = null; } openViewer(0); } });
+$('vBack').addEventListener('click', () => { $('viewer').hidden = true; });
+$('vStrip').addEventListener('click', e => { const b = e.target.closest('button'); if (b) openViewer(+b.dataset.i); });
+(() => {
+  let x0 = null;
+  $('vMain').addEventListener('pointerdown', e => { x0 = e.clientX; });
+  $('vMain').addEventListener('pointerup', e => { if (x0 === null) return; const d = e.clientX - x0; x0 = null; if (Math.abs(d) > 40) openViewer(vIdx + (d < 0 ? 1 : -1)); });
+})();
+
+// ---------- boot ----------
+async function boot() {
+  layout(); applyZoom(); applyText();
+  requestAnimationFrame(loop);
+  try {
+    const all = await idb('readonly', s => s.getAll());
+    for (const f of all || []) FILES.set(f.id, f);
+  } catch (e) {}
+  if (S.backId && !FILES.has(S.backId)) S.backId = [...FILES.values()].find(x => x.kind === 'back')?.id || null;
+  if (S.frontId && !FILES.has(S.frontId)) S.frontId = [...FILES.values()].find(x => x.kind === 'front')?.id || null;
+  if (!S.backId) S.backId = [...FILES.values()].find(x => x.kind === 'back')?.id || null;
+  if (S.restart) S.times = {};
+  save();
+  applySource();
+  setTimeout(refreshThumb, 300);
+}
+boot();
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
+</body>
+</html>
