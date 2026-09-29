@@ -73,7 +73,10 @@ svg { display: block; }
 .focus.adjusting .track { opacity: .8; }
 .lockTag { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--yellow); color: #000; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 3px 7px; border-radius: 4px; pointer-events: none; white-space: nowrap; }
 .countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 120px; font-weight: 200; color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,.35); pointer-events: none; font-variant-numeric: tabular-nums; }
-.hint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); text-align: center; background: var(--glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font-size: 13px; line-height: 1.3; padding: 7px 12px; border-radius: 16px; pointer-events: none; }
+
+/* invisible strip above the viewfinder: hold it to open settings */
+.topZone { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--st) + 64px); z-index: 2; touch-action: none; }
+.app.video .topZone { height: calc(var(--st) + 60px); }
 
 /* top pills */
 .pill { position: absolute; top: calc(var(--st) + 14px); height: 38px; border-radius: 19px; display: flex; align-items: center; background: var(--glass); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6); transition: opacity .25s; z-index: 3; }
@@ -124,7 +127,8 @@ svg { display: block; }
 .bottom { position: absolute; left: 0; right: 0; top: var(--rowY); transform: translateY(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 26px; transition: opacity .25s; z-index: 2; }
 .app.recording .bottom { opacity: 0; pointer-events: none; }
 .thumb { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.14); justify-self: start; }
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb { touch-action: none; }
+.thumb img { pointer-events: none; -webkit-touch-callout: none; width: 100%; height: 100%; object-fit: cover; display: block; }
 .thumb.pop img { animation: tpop .4s cubic-bezier(.2,.9,.3,1.1); }
 @keyframes tpop { from { transform: scale(.3); opacity: .2; } to { transform: scale(1); opacity: 1; } }
 .modes { position: relative; display: flex; height: 40px; padding: 3px; border-radius: 20px; background: var(--chip); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.06); }
@@ -220,10 +224,10 @@ svg { display: block; }
     </div>
     <div class="lockTag" id="lockTag" hidden></div>
     <div class="countdown" id="countdown" hidden></div>
-    <div class="hint" id="hint" hidden></div>
     <div class="blink" id="blink"></div>
   </div>
 
+  <div class="topZone" id="topZone"></div>
   <div class="pill left" id="fmtPill">
     <button type="button" id="resBtn" aria-label="Resolution"><span id="resTxt">HD</span><sup>RES</sup></button>
     <button type="button" id="fpsBtn" aria-label="Frame rate"><span id="fpsTxt">30</span><sup>FPS</sup></button>
@@ -315,7 +319,7 @@ svg { display: block; }
     </div>
 
     <p class="how"><b>Как поставить на экран «Домой».</b> Откройте страницу в Safari, нажмите «Поделиться» и выберите «На экран „Домой“». Приложение будет открываться на весь экран, без адресной строки.</p>
-    <p class="how"><b>Как открыть это меню.</b> Удерживайте палец на самом верху экрана камеры около секунды.</p>
+    <p class="how"><b>Как открыть это меню.</b> Подержите палец полсекунды на кружке с фото слева внизу. Ещё можно подержать на самом верху экрана или на кнопках сверху.</p>
   </div>
 </section>
 
@@ -345,7 +349,8 @@ const TEXT = {
 };
 const sysLang = (navigator.language || 'en').toLowerCase().startsWith('ru') ? 'ru' : 'en';
 const T = () => TEXT[S.lang === 'auto' ? sysLang : S.lang];
-const numFmt = new Intl.NumberFormat(navigator.language || 'en', { maximumFractionDigits: 1 });
+const LOC = (() => { try { new Intl.NumberFormat(navigator.language); return navigator.language; } catch (e) { return 'en'; } })();
+const numFmt = new Intl.NumberFormat(LOC, { maximumFractionDigits: 1 });
 
 // ---------- persisted settings ----------
 const DEF = { backId: null, frontId: null, loop: true, restart: true, zoomVideo: true, sound: true, lang: 'auto', grid: false, timer: 0, times: {}, hinted: false };
@@ -496,9 +501,6 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pointerdown', () => { if (curId && feed.paused && !feed.ended) feed.play().catch(() => {}); unlockAudio(); }, { capture: true });
 
 function updateHint() {
-  const h = $('hint');
-  h.textContent = T().hint;
-  h.hidden = !(useDemo && !FILES.size && !S.hinted);
 }
 
 // ---------- render loop: demo footage + blurred surround ----------
@@ -787,18 +789,29 @@ function endPtr(e) {
 }
 vf.addEventListener('pointerup', endPtr); vf.addEventListener('pointercancel', endPtr);
 
-// ---------- hold the top of the screen to open settings ----------
-let holdT = 0, holdStart = null, swallowClick = false;
-addEventListener('pointerdown', e => {
-  if ($('sheet').classList.contains('on') || !$('viewer').hidden || R.recording) return;
-  const st = parseFloat(app.style.getPropertyValue('--st')) || 0;
-  if (e.clientY > st + 64) return;
-  holdStart = { x: e.clientX, y: e.clientY };
-  clearTimeout(holdT);
-  holdT = setTimeout(() => { holdStart = null; swallowClick = true; openSheet(); }, 700);
-}, { capture: true });
-addEventListener('pointermove', e => { if (holdStart && Math.hypot(e.clientX - holdStart.x, e.clientY - holdStart.y) > 12) { clearTimeout(holdT); holdStart = null; } }, { capture: true });
-addEventListener('pointerup', () => { clearTimeout(holdT); holdStart = null; setTimeout(() => { swallowClick = false; }, 50); }, { capture: true });
+// ---------- open settings: hold the gallery circle or the top of the screen ----------
+// Uses touch events on phones (more reliable on iOS than pointer events) and pointer events elsewhere.
+let swallowClick = false;
+function onHold(el, fn, ms = 450) {
+  let t = 0, sx = 0, sy = 0;
+  const start = (x, y) => {
+    if ($('sheet').classList.contains('on') || !$('viewer').hidden || R.recording) return;
+    sx = x; sy = y; clearTimeout(t);
+    t = setTimeout(() => { t = 0; swallowClick = true; setTimeout(() => { swallowClick = false; }, 700); fn(); }, ms);
+  };
+  const move = (x, y) => { if (t && Math.hypot(x - sx, y - sy) > 16) { clearTimeout(t); t = 0; } };
+  const stop = () => { clearTimeout(t); t = 0; };
+  el.addEventListener('touchstart', e => { const p = e.touches[0]; if (e.touches.length === 1) start(p.clientX, p.clientY); else stop(); }, { passive: true });
+  el.addEventListener('touchmove', e => { const p = e.touches[0]; move(p.clientX, p.clientY); }, { passive: true });
+  el.addEventListener('touchend', stop); el.addEventListener('touchcancel', stop);
+  el.addEventListener('mousedown', e => start(e.clientX, e.clientY));
+  el.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+  el.addEventListener('mouseup', stop); el.addEventListener('mouseleave', stop);
+}
+onHold($('thumb'), openSheet);
+onHold($('topZone'), openSheet);
+onHold($('ctrlPill'), openSheet, 600);
+onHold($('fmtPill'), openSheet, 600);
 addEventListener('click', e => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } }, { capture: true });
 addEventListener('contextmenu', e => e.preventDefault());
 
@@ -966,7 +979,7 @@ function openViewer(i) {
   vIdx = clamp(i, 0, items.length - 1);
   const it = items[vIdx], t = T();
   $('vImg').src = it.src; $('vPlay').hidden = it.kind !== 'video';
-  const time = it.at.toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' });
+  const time = it.at.toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
   $('vTitle').innerHTML = `${t.today}<small>${time}</small>`;
   $('vStrip').innerHTML = items.map((x, k) => `<button type="button" class="${k === vIdx ? 'on' : ''}" data-i="${k}"><img src="${x.src}" alt=""></button>`).join('');
   $('viewer').hidden = false;
