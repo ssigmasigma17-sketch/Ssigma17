@@ -1,471 +1,399 @@
 <title>Симулятор камеры</title>
-<meta name="description" content="Учебный симулятор фотокамеры: выдержка, диафрагма, ISO, фокусное расстояние и фокус.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<meta name="description" content="Симулятор камеры телефона: зум, режимы, выдержка, диафрагма, ISO, фокус касанием и галерея снимков.">
 <style>
-/* Layout: camera-body console — viewfinder on the left, control deck on the right, contact sheet below. Single dark look by choice. */
+/* Layout: one phone-sized camera screen — top bar, 3:4 viewfinder with overlaid controls, mode carousel, shutter row. Single dark look by choice. */
 :root {
-  --body: #14161a;
-  --panel: #1c1f25;
-  --panel-2: #23272e;
-  --line: #313640;
-  --fg: #e8eaee;
-  --dim: #8d93a0;
-  --accent: #f2b233;
-  --accent-ink: #1a1405;
-  --good: #6fcf8e;
-  --warn: #f08a4b;
-  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
-  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --bg: #000;
+  --fg: #fff;
+  --dim: rgba(255,255,255,.62);
+  --glass: rgba(28,28,30,.62);
+  --glass-2: rgba(58,58,62,.78);
+  --accent: #ffd426;
+  --warn: #ff9f43;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   color-scheme: dark;
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
-html, body { background: var(--body); color: var(--fg); }
-body { font-family: var(--font-body); font-size: 15px; line-height: 1.45; margin: 0; }
-.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 40px; display: grid; gap: 18px; }
+html, body { background: var(--bg); color: var(--fg); height: 100%; }
+body { margin: 0; font-family: var(--font); font-size: 15px; padding-inline: 16px; padding-block: 12px; display: grid; place-items: start center; overflow-x: hidden; }
+button { font-family: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-h1 { font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: .02em; margin: 0; text-transform: uppercase; }
-h1 span { color: var(--accent); }
-header p { margin: 0; color: var(--dim); max-width: 60ch; }
+.phone { width: min(430px, 100%, max(300px, calc((100dvh - 250px) * .75))); display: grid; user-select: none; -webkit-user-select: none; }
 
-.main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
-@media (max-width: 960px) { .main { grid-template-columns: minmax(0, 1fr); } }
+/* top bar */
+.top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 46px; }
+.icon-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--glass-2); }
+.icon-btn svg { width: 20px; height: 20px; }
+.icon-btn.on { background: var(--accent); color: #000; }
+.chev { justify-self: center; width: 36px; height: 26px; border-radius: 13px; display: grid; place-items: center; }
+.chev svg { width: 22px; height: 12px; transition: transform .25s; }
+.chev[aria-expanded="true"] svg { transform: rotate(180deg); }
+.chev[aria-expanded="true"] { background: var(--glass-2); }
+.top .right { justify-self: end; }
 
-/* Viewfinder */
-.vf { display: grid; gap: 10px; min-width: 0; }
-.screen { position: relative; background: #000; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
-.screen canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; max-width: 100%; }
-.af { position: absolute; left: 52%; top: 64%; width: 9%; aspect-ratio: 1; transform: translate(-50%, -50%);
-  border: 2px solid rgba(255,255,255,.75); border-radius: 3px; pointer-events: none; transition: border-color .2s; }
-.af.ok { border-color: var(--good); }
-.grid-lines { position: absolute; inset: 0; pointer-events: none;
-  background:
-    linear-gradient(to right, transparent calc(33.33% - .5px), rgba(255,255,255,.18) calc(33.33% - .5px), rgba(255,255,255,.18) calc(33.33% + .5px), transparent calc(33.33% + .5px), transparent calc(66.66% - .5px), rgba(255,255,255,.18) calc(66.66% - .5px), rgba(255,255,255,.18) calc(66.66% + .5px), transparent calc(66.66% + .5px)),
-    linear-gradient(to bottom, transparent calc(33.33% - .5px), rgba(255,255,255,.18) calc(33.33% - .5px), rgba(255,255,255,.18) calc(33.33% + .5px), transparent calc(33.33% + .5px), transparent calc(66.66% - .5px), rgba(255,255,255,.18) calc(66.66% - .5px), rgba(255,255,255,.18) calc(66.66% + .5px), transparent calc(66.66% + .5px)); }
-.flash { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
-.flash.go { animation: blink .28s ease-out; }
+.readout { display: flex; justify-content: center; gap: 12px; font-family: var(--mono); font-size: 12px; color: var(--dim); height: 22px; align-items: center; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.readout .meter { color: var(--fg); }
+.readout .meter.bad { color: var(--warn); }
+.readout .auto { color: var(--accent); }
+
+/* viewfinder */
+.vf { position: relative; aspect-ratio: 3 / 4; width: 100%; max-width: 100%; overflow: hidden; background: #111; touch-action: none; cursor: crosshair; }
+.vf canvas#view { display: block; width: 100%; height: 100%; }
+.gridlines { position: absolute; inset: 0; pointer-events: none; }
+.gridlines i { position: absolute; background: rgba(255,255,255,.28); }
+.af { position: absolute; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 1.5px solid var(--accent); pointer-events: none; transition: opacity .6s; }
+.af.dim { opacity: .35; }
+.af.pop { animation: afpop .35s ease-out; }
+@keyframes afpop { 0% { transform: translate(-50%, -50%) scale(1.35); } 100% { transform: translate(-50%, -50%) scale(1); } }
+.af .sunline { position: absolute; right: -18px; top: 0; bottom: 0; width: 1.5px; background: var(--accent); opacity: .7; }
+.af .sun { position: absolute; right: -26px; width: 17px; height: 17px; margin-top: -8px; color: var(--accent); }
+.af .tag { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); background: var(--accent); color: #000; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--fg); font-size: 12.5px; line-height: 1.3; padding: 6px 12px; border-radius: 14px; text-align: center; pointer-events: none; }
+.hint b { color: var(--warn); font-weight: 600; }
+.histo { position: absolute; top: 48px; left: 10px; width: 30%; height: auto; aspect-ratio: 2 / 1; background: var(--glass); border-radius: 8px; pointer-events: none; }
+.blackout { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+.blackout.go { animation: blink .22s ease-out; }
 @keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .flash.go { animation: none; } }
 
-.lcd { display: grid; grid-template-columns: repeat(6, auto) 1fr; align-items: center; gap: 6px 18px; background: var(--panel);
-  border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.lcd .v { font-size: 19px; font-weight: 600; white-space: nowrap; }
-.lcd .v small { font-size: 11px; color: var(--dim); font-weight: 400; margin-right: 4px; letter-spacing: .06em; }
-.lcd .mode { justify-self: start; color: var(--accent-ink); background: var(--accent); border-radius: 4px; padding: 0 7px; font-size: 16px; }
-.lcd .auto { color: var(--accent); }
-@media (max-width: 640px) { .lcd { grid-template-columns: repeat(3, auto); } .lcd .v { font-size: 16px; } }
+.overlay { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 10px; padding-block: 28px 12px; background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0)); cursor: default; }
+.zoom { justify-self: center; display: flex; gap: 6px; background: rgba(0,0,0,.32); padding: 4px; border-radius: 22px; }
+.zoom button { width: 32px; height: 32px; border-radius: 50%; background: var(--glass-2); font-size: 11px; font-weight: 600; display: grid; place-items: center; transition: transform .15s; }
+.zoom button.on { color: var(--accent); transform: scale(1.18); font-size: 12px; }
 
-.meter { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 8px; display: grid; gap: 4px; }
-.meter-top { display: flex; justify-content: space-between; font-family: var(--font-display); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
-.meter-top b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; text-transform: none; }
-.meter canvas { width: 100%; height: 42px; display: block; }
+.tools { display: flex; gap: 6px; overflow-x: auto; padding-inline: 12px; scrollbar-width: none; }
+.tools::-webkit-scrollbar { display: none; }
+.tool { flex: none; display: grid; justify-items: center; gap: 4px; width: 54px; }
+.tool .ring { width: 38px; height: 38px; border-radius: 50%; background: var(--glass-2); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.tool span { font-size: 10px; color: var(--dim); white-space: nowrap; }
+.tool[aria-pressed="true"] .ring { background: var(--fg); color: #000; }
+.tool.on .ring { color: var(--accent); }
+.tool[aria-pressed="true"].on .ring { background: var(--accent); color: #000; }
 
-.row2 { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 10px; }
-@media (max-width: 640px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
-.tips { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
-.tips h3, .hist h3, .deck h3, .sheet h3 { font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; }
-.tips ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-.tips li { padding-left: 14px; position: relative; }
-.tips li::before { content: ""; position: absolute; left: 0; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
-.tips li.w::before { background: var(--warn); }
-.hist { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-.hist canvas { width: 100%; height: 90px; display: block; }
+.dial { display: grid; gap: 6px; }
+.dial-label { text-align: center; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.dial-label b { color: var(--accent); font-family: var(--mono); letter-spacing: 0; margin-left: 6px; text-transform: none; }
+.dial-label em { font-style: normal; color: var(--fg); margin-left: 6px; letter-spacing: 0; text-transform: none; font-weight: 500; }
+.ruler { position: relative; height: 40px; overflow: hidden; cursor: ew-resize; touch-action: none;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); }
+.ruler.off { opacity: .4; cursor: not-allowed; }
+.track { position: absolute; left: 50%; top: 0; height: 100%; will-change: transform; }
+.tick { position: absolute; top: 4px; width: 1.5px; height: 12px; background: rgba(255,255,255,.55); transform: translateX(-50%); }
+.tick.major { height: 18px; background: #fff; }
+.tick b { position: absolute; top: 21px; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 500; white-space: nowrap; font-family: var(--mono); color: var(--dim); }
+.needle { position: absolute; left: 50%; top: 0; width: 2px; height: 22px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
 
-/* Control deck */
-.deck { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 16px; }
-.dial { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--body); padding: 4px; border-radius: 8px; }
-.dial button { font-family: var(--font-display); font-weight: 700; font-size: 18px; padding: 6px 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
-.dial button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-.mode-note { color: var(--dim); font-size: 13px; margin: -8px 0 0; }
-.ctl { display: grid; gap: 4px; }
-.ctl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.ctl-head label { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; }
-.ctl-head output { font-family: var(--font-mono); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.ctl-head output.is-auto { color: var(--accent); }
-.ctl-head output.is-auto::after { content: " A"; font-size: 11px; vertical-align: super; }
-.ctl-sub { display: flex; justify-content: space-between; gap: 8px; color: var(--dim); font-size: 12px; font-family: var(--font-mono); }
-input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
-input[type=range]:disabled { opacity: .35; }
-.inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
-.inline input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips button, .btn { font-family: var(--font-body); font-size: 13px; font-weight: 500; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); cursor: pointer; }
-.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-.btn { border-radius: 6px; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.shutter { display: flex; align-items: center; gap: 14px; padding-top: 4px; border-top: 1px solid var(--line); padding-block: 14px 0; }
-.shutter button { width: 64px; height: 64px; border-radius: 50%; border: 4px solid var(--panel-2); outline: 2px solid var(--line); background: radial-gradient(circle at 35% 30%, #f7c65a, var(--accent) 55%, #b57d12); cursor: pointer; flex: none; }
-.shutter button:active { transform: scale(.95); }
-.shutter p { margin: 0; color: var(--dim); font-size: 13px; }
-.sep { height: 1px; background: var(--line); }
+/* modes */
+.modes { height: 44px; overflow: hidden; position: relative; touch-action: pan-y; }
+.mode-track { position: absolute; top: 0; left: 0; display: flex; gap: 22px; height: 100%; align-items: center; transition: transform .28s ease; white-space: nowrap; }
+.mode-track button { font-size: 13px; font-weight: 600; letter-spacing: .06em; color: var(--dim); padding: 8px 0; }
+.mode-track button[aria-pressed="true"] { color: var(--accent); }
 
-/* Contact sheet */
-.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
-.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
-.frame { background: var(--body); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; cursor: zoom-in; padding: 0; color: var(--fg); text-align: left; }
-.frame img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; }
-.frame span { display: block; padding: 6px 8px; font-family: var(--font-mono); font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
-.empty { color: var(--dim); margin: 0; }
-.lightbox { position: fixed; inset: 0; background: rgba(5,6,8,.9); display: grid; place-items: center; padding: 16px; z-index: 10; cursor: zoom-out; }
-.lightbox img { max-width: 100%; max-height: 82vh; border-radius: 6px; }
-.lightbox p { font-family: var(--font-mono); color: var(--fg); margin: 10px 0 0; text-align: center; }
+/* bottom row */
+.bottom { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-block: 6px 18px; padding-inline: 18px; }
+.thumb { width: 46px; height: 46px; border-radius: 8px; overflow: hidden; background: #1c1c1e; border: 1px solid rgba(255,255,255,.14); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb.pop img { animation: thumbin .35s ease-out; }
+@keyframes thumbin { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.shutter { width: 74px; height: 74px; border-radius: 50%; border: 4px solid #fff; display: grid; place-items: center; }
+.shutter i { width: 60px; height: 60px; border-radius: 50%; background: #fff; transition: transform .1s; }
+.shutter:active i { transform: scale(.88); }
+.cycle { justify-self: end; width: 46px; height: 46px; border-radius: 50%; background: var(--glass-2); display: grid; place-items: center; }
+.cycle svg { width: 24px; height: 24px; }
+
+/* toast */
+.toast { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 8px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; pointer-events: none; transition: opacity .3s; opacity: 0; }
+.toast.show { opacity: 1; }
+
+/* gallery */
+.gallery { position: fixed; inset: 0; background: #000; z-index: 20; display: grid; grid-template-rows: auto 1fr auto auto; padding-inline: 16px; padding-block: calc(env(safe-area-inset-top, 0px) + 8px) calc(env(safe-area-inset-bottom, 0px) + 12px); }
+.g-top { display: flex; justify-content: space-between; align-items: center; height: 44px; max-width: 700px; width: 100%; margin: 0 auto; }
+.g-top button { color: var(--accent); font-size: 16px; font-weight: 600; }
+.g-top span { font-size: 14px; color: var(--dim); }
+.g-main { display: grid; place-items: center; min-height: 0; }
+.g-main img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.g-cap { text-align: center; font-family: var(--mono); font-size: 12px; color: var(--dim); padding-block: 10px; font-variant-numeric: tabular-nums; }
+.g-strip { display: flex; gap: 4px; overflow-x: auto; justify-content: safe center; }
+.g-strip button { flex: none; width: 48px; height: 64px; opacity: .55; }
+.g-strip button.on { opacity: 1; outline: 2px solid var(--fg); }
+.g-strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.g-empty { color: var(--dim); }
+
+@media (prefers-reduced-motion: reduce) { .mode-track, .af, .chev svg { transition: none; } .blackout.go, .af.pop, .thumb.pop img { animation: none; } }
 </style>
 
-<div class="wrap">
-  <header>
-    <h1>Симулятор <span>камеры</span></h1>
-    <p>Меняйте выдержку, диафрагму, ISO и фокус и смотрите, как меняются яркость, глубина резкости, смаз и шум. Нажмите на спуск, чтобы сохранить кадр.</p>
-  </header>
+<div class="phone" id="phone">
+  <div class="top">
+    <button class="icon-btn" id="flashBtn" aria-label="Вспышка" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.2 2 5 13.4h5.6L9.4 22 18 10.2h-5.7L13.2 2Z"/></svg>
+    </button>
+    <button class="chev" id="chev" aria-label="Настройки камеры" aria-expanded="false">
+      <svg viewBox="0 0 22 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 10 11 2l9 8"/></svg>
+    </button>
+    <button class="icon-btn right" id="histBtn" aria-label="Гистограмма" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="13" width="3" height="8" rx="1"/><rect x="8" y="8" width="3" height="13" rx="1"/><rect x="13" y="4" width="3" height="17" rx="1"/><rect x="18" y="10" width="3" height="11" rx="1"/></svg>
+    </button>
+  </div>
+  <div class="readout" id="readout" aria-live="polite"></div>
 
-  <div class="main">
-    <section class="vf" aria-label="Видоискатель">
-      <div class="screen">
-        <canvas id="view" width="1200" height="800" aria-label="Изображение с камеры"></canvas>
-        <div class="grid-lines" id="gridLines"></div>
-        <div class="af" id="afPoint"></div>
-        <div class="flash" id="flash"></div>
-      </div>
+  <div class="vf" id="vf">
+    <canvas id="view" width="900" height="1200" aria-label="Видоискатель"></canvas>
+    <div class="gridlines" id="gridlines"><i style="left:33.33%;top:0;bottom:0;width:1px"></i><i style="left:66.66%;top:0;bottom:0;width:1px"></i><i style="top:33.33%;left:0;right:0;height:1px"></i><i style="top:66.66%;left:0;right:0;height:1px"></i></div>
+    <div class="af dim" id="af" style="left:52%;top:64%"><span class="tag" id="afTag" hidden>Фокус заблокирован</span><span class="sunline"></span>
+      <svg class="sun" id="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 1.5v2.5M12 20v2.5M1.5 12H4M20 12h2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
+    </div>
+    <div class="hint" id="hint" hidden></div>
+    <canvas class="histo" id="histo" width="256" height="128" hidden></canvas>
+    <div class="blackout" id="blackout"></div>
 
-      <div class="lcd" id="lcd" aria-live="polite">
-        <span class="v mode" id="lcdMode">Av</span>
-        <span class="v" id="lcdT"></span>
-        <span class="v" id="lcdN"></span>
-        <span class="v" id="lcdIso"></span>
-        <span class="v" id="lcdF"></span>
-        <span class="v" id="lcdComp"></span>
-        <span></span>
+    <div class="overlay" id="overlay">
+      <div class="dial" id="dial" hidden>
+        <div class="dial-label"><span id="dialName"></span><b id="dialVal"></b><em id="dialNote"></em></div>
+        <div class="ruler" id="ruler" tabindex="0" role="slider" aria-label="Значение"><div class="track" id="track"></div><div class="needle"></div></div>
       </div>
-
-      <div class="meter">
-        <div class="meter-top"><span>Экспонометр</span><b id="meterVal">0.0 EV</b></div>
-        <canvas id="meter" width="800" height="84"></canvas>
-      </div>
-
-      <div class="row2">
-        <div class="tips"><h3>Что видно в кадре</h3><ul id="tips"></ul></div>
-        <div class="hist"><h3>Гистограмма</h3><canvas id="hist" width="512" height="180"></canvas></div>
-      </div>
-    </section>
-
-    <aside class="deck" aria-label="Настройки камеры">
-      <div>
-        <h3>Режим съёмки</h3>
-        <div class="dial" id="dial" role="group" aria-label="Режим съёмки">
-          <button type="button" data-mode="M">M</button>
-          <button type="button" data-mode="Av">Av</button>
-          <button type="button" data-mode="Tv">Tv</button>
-          <button type="button" data-mode="P">P</button>
-        </div>
-      </div>
-      <p class="mode-note" id="modeNote"></p>
-
-      <div class="ctl">
-        <div class="ctl-head"><label for="shutter">Выдержка</label><output id="oShutter"></output></div>
-        <input type="range" id="shutter" min="0" max="54" step="1">
-        <div class="ctl-sub"><span>30″</span><span>1/8000</span></div>
-      </div>
-      <div class="ctl">
-        <div class="ctl-head"><label for="aperture">Диафрагма</label><output id="oAperture"></output></div>
-        <input type="range" id="aperture" min="0" max="24" step="1">
-        <div class="ctl-sub"><span>f/1.4</span><span>f/22</span></div>
-      </div>
-      <div class="ctl">
-        <div class="ctl-head"><label for="iso">ISO</label><output id="oIso"></output></div>
-        <input type="range" id="iso" min="0" max="22" step="1">
-        <label class="inline"><input type="checkbox" id="autoIso"> Авто-ISO</label>
-      </div>
-      <div class="ctl">
-        <div class="ctl-head"><label for="comp">Экспокоррекция</label><output id="oComp"></output></div>
-        <input type="range" id="comp" min="-9" max="9" step="1">
-        <div class="ctl-sub"><span>−3</span><span>0</span><span>+3</span></div>
-      </div>
-
-      <div class="sep"></div>
-
-      <div class="ctl">
-        <div class="ctl-head"><label for="focal">Фокусное расстояние</label><output id="oFocal"></output></div>
-        <input type="range" id="focal" min="24" max="200" step="1">
-        <div class="ctl-sub"><span>24 мм</span><span>200 мм</span></div>
-      </div>
-      <div class="ctl">
-        <div class="ctl-head"><label for="focus">Дистанция фокусировки</label><output id="oFocus"></output></div>
-        <input type="range" id="focus" min="0" max="100" step="1">
-        <div class="ctl-sub"><span id="dofText">ГРИП</span><button type="button" class="btn" id="afBtn">Фокус на человека</button></div>
-      </div>
-
-      <div class="sep"></div>
-
-      <div class="ctl">
-        <h3>Освещение</h3>
-        <div class="chips" id="lightChips"></div>
-      </div>
-      <div class="ctl">
-        <h3>Человек в кадре</h3>
-        <div class="chips" id="speedChips"></div>
-      </div>
-      <div class="inline">
-        <label class="inline"><input type="checkbox" id="tripod"> Штатив</label>
-        <label class="inline"><input type="checkbox" id="showGrid" checked> Сетка</label>
-      </div>
-
-      <div class="shutter">
-        <button type="button" id="shoot" aria-label="Сделать снимок"></button>
-        <p>Спуск затвора. Клавиша <b>Пробел</b> тоже работает. Снимки появятся ниже.</p>
-      </div>
-    </aside>
+      <div class="tools" id="tools" hidden></div>
+      <div class="zoom" id="zoom"></div>
+    </div>
   </div>
 
-  <section class="sheet" aria-label="Снимки">
-    <h3>Снимки</h3>
-    <div class="frames" id="frames"></div>
-    <p class="empty" id="empty">Пока нет снимков. Настройте камеру и нажмите на спуск.</p>
-  </section>
+  <div class="modes" id="modes"><div class="mode-track" id="modeTrack"></div></div>
+
+  <div class="bottom">
+    <button class="thumb" id="thumb" aria-label="Открыть снимки"><img id="thumbImg" alt="" hidden></button>
+    <button class="shutter" id="shoot" aria-label="Снять"><i></i></button>
+    <button class="cycle" id="cycleBtn" aria-label="Сменить освещение">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>
+    </button>
+  </div>
 </div>
 
-<div class="lightbox" id="lightbox" hidden><div><img id="lbImg" alt=""><p id="lbCap"></p></div></div>
+<div class="toast" id="toast"></div>
+
+<div class="gallery" id="gallery" hidden>
+  <div class="g-top"><span id="gCount"></span><button type="button" id="gDone">Готово</button></div>
+  <div class="g-main"><img id="gImg" alt=""><p class="g-empty" id="gEmpty">Снимков пока нет.</p></div>
+  <div class="g-cap" id="gCap"></div>
+  <div class="g-strip" id="gStrip"></div>
+</div>
 
 <script>
 (() => {
 'use strict';
-const W = 1200, H = 800, SENSOR = 36; // full-frame sensor width, mm
-const COC = 0.03;                      // circle of confusion, mm
-const SUBJECT_D = 5;                   // distance to the person, m
+const W = 900, H = 1200;
+const PXMM = H / 36;      // the long side of the frame maps to 36 mm (full-frame equivalent)
+const COC = 0.03;         // circle of confusion, mm
+const SUBJECT_D = 5;      // distance to the person, m
+const BASE_F = 26;        // "1×" lens, mm equivalent
+const XA = -W * .75, XB = W * 1.75, YA = -H * .8, YB = H * 1.6; // scene extent, enough for 0.5×
 
 const SHUTTERS = [30,25,20,15,13,10,8,6,5,4,3.2,2.5,2,1.6,1.3,1,0.8,0.6,0.5,0.4,0.3,1/4,1/5,1/6,1/8,1/10,1/13,1/15,1/20,1/25,1/30,1/40,1/50,1/60,1/80,1/100,1/125,1/160,1/200,1/250,1/320,1/400,1/500,1/640,1/800,1/1000,1/1250,1/1600,1/2000,1/2500,1/3200,1/4000,1/5000,1/6400,1/8000];
 const APERTURES = [1.4,1.6,1.8,2,2.2,2.5,2.8,3.2,3.5,4,4.5,5,5.6,6.3,7.1,8,9,10,11,13,14,16,18,20,22];
-const ISOS = [100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000,10000,12800,25600];
+const ISOS = [50,64,80,100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000,10000,12800];
+const FOCALS = [13,15,18,20,22,24,26,28,32,35,40,45,52,58,65,70,77,85,100,120,135,150,170,200];
+const FOCI = [0.3,0.4,0.5,0.6,0.7,0.8,1,1.2,1.4,1.7,2,2.5,3,4,5,6,8,10,14,20,30,50,100,Infinity];
 
 const LIGHTS = {
-  sunny:    { name: 'Солнце',        ev: 15, tint: [1, 1, 1],          sky: ['#2f73d0', '#a8d0f2'], sun: { x: .8, y: .16, r: 34, c: '#fffbe6', glow: 'rgba(255,250,220,.55)' }, shadow: .28 },
-  overcast: { name: 'Пасмурно',      ev: 12, tint: [.8, .82, .86],     sky: ['#8f98a3', '#cfd3d8'], shadow: 0 },
-  golden:   { name: 'Золотой час',   ev: 11, tint: [1, .8, .6],        sky: ['#44589a', '#f7a458'], sun: { x: .2, y: .44, r: 46, c: '#ffd9a0', glow: 'rgba(255,170,90,.6)' }, shadow: .2 },
-  dusk:     { name: 'Сумерки',       ev: 7,  tint: [.42, .47, .66],    sky: ['#1b2856', '#a05f78'], lamps: .7, shadow: 0 },
-  night:    { name: 'Ночь',          ev: 4,  tint: [.2, .23, .38],     sky: ['#040816', '#18234a'], lamps: 1, stars: true, shadow: 0 },
+  sunny:    { name: 'Солнце',      ev: 15, tint: [1, 1, 1],       sky: ['#2f73d0', '#a8d0f2'], sun: { x: .82, y: .12, r: 34, c: '#fffbe6', glow: 'rgba(255,250,220,.55)' }, shadow: .28 },
+  overcast: { name: 'Пасмурно',    ev: 12, tint: [.8, .82, .86],  sky: ['#8f98a3', '#cfd3d8'], shadow: 0 },
+  golden:   { name: 'Закат',       ev: 11, tint: [1, .8, .6],     sky: ['#44589a', '#f7a458'], sun: { x: .15, y: .44, r: 46, c: '#ffd9a0', glow: 'rgba(255,170,90,.6)' }, shadow: .2 },
+  dusk:     { name: 'Сумерки',     ev: 7,  tint: [.42, .47, .66], sky: ['#1b2856', '#a05f78'], lamps: .7, shadow: 0 },
+  night:    { name: 'Ночь',        ev: 4,  tint: [.2, .23, .38],  sky: ['#040816', '#18234a'], lamps: 1, stars: true, shadow: 0 },
 };
-const SPEEDS = [
-  { v: 0,   name: 'Стоит' },
-  { v: 1.4, name: 'Идёт' },
-  { v: 5,   name: 'Бежит' },
-  { v: 9,   name: 'На велосипеде' },
+const LIGHT_KEYS = Object.keys(LIGHTS);
+const SPEEDS = [ { v: 0, name: 'Стоит' }, { v: 1.4, name: 'Идёт' }, { v: 5, name: 'Бежит' }, { v: 9, name: 'Велосипед' } ];
+
+// Phone-style modes mapped onto real exposure programs.
+const MODES = [
+  { key: 'tv',    label: 'ВЫДЕРЖКА',  prog: 'Tv' },
+  { key: 'port',  label: 'ПОРТРЕТ',   prog: 'Av' },
+  { key: 'photo', label: 'ФОТО',      prog: 'P' },
+  { key: 'pro',   label: 'ПРО',       prog: 'M' },
+  { key: 'av',    label: 'ДИАФРАГМА', prog: 'Av' },
 ];
 
-const S = { mode: 'Av', si: 44, ai: 12, ii: 0, autoIso: false, comp: 0, focal: 50, focusV: 0, light: 'sunny', speed: 0, tripod: false };
+const S = { mode: 'photo', si: 44, ai: 3, ii: 3, autoIso: true, comp: 0, focal: 26, focus: SUBJECT_D, light: 'sunny', speed: 0, tripod: false, flash: false, grid: true };
 
 // ---------- helpers ----------
 const $ = id => document.getElementById(id);
 const log2 = Math.log2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-function nearest(arr, v) { let bi = 0, bd = Infinity; arr.forEach((a, i) => { const d = Math.abs(Math.log(a) - Math.log(v)); if (d < bd) { bd = d; bi = i; } }); return bi; }
+function nearest(arr, v) { let bi = 0, bd = Infinity; arr.forEach((a, i) => { const d = !isFinite(a) || !isFinite(v) ? (a === v ? 0 : Infinity) : Math.abs(Math.log(a) - Math.log(v)); if (d < bd) { bd = d; bi = i; } }); return bi; }
 const fmtT = t => t >= 0.3 ? `${+t.toFixed(1)}″` : `1/${Math.round(1 / t)}`;
-const fmtN = n => `f/${n}`;
-const fmtComp = c => { const v = c / 3; if (c === 0) return '±0'; const s = c > 0 ? '+' : '−'; const a = Math.abs(c); const w = Math.floor(a / 3), r = a % 3; return s + (w ? w : '') + (r ? (w ? ' ' : '') + r + '/3' : ''); };
-const fmtM = d => !isFinite(d) ? '∞' : d >= 100 ? `${Math.round(d)} м` : d >= 10 ? `${d.toFixed(0)} м` : `${d.toFixed(1)} м`;
-function focusDist(v) { return v >= 100 ? Infinity : 0.5 * Math.pow(400, v / 99); }
-function focusV(d) { return Math.round(99 * Math.log(d / 0.5) / Math.log(400)); }
+const fmtN = n => `ƒ${n}`;
+const fmtComp = c => { if (c === 0) return '0'; const s = c > 0 ? '+' : '−', a = Math.abs(c), w = Math.floor(a / 3), r = a % 3; return s + (w ? w : '') + (r ? (w ? ' ' : '') + r + '/3' : ''); };
+const fmtM = d => !isFinite(d) ? '∞' : d >= 10 ? `${Math.round(d)} м` : `${+d.toFixed(1)} м`;
+const fmtZ = f => { const z = f / BASE_F; return (z < 1 ? z.toFixed(1).replace(/^0/, '') : (Math.round(z * 10) / 10).toString().replace('.0', '')) + '×'; };
 function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const prog = () => MODES.find(m => m.key === S.mode).prog;
 
-// ---------- exposure logic ----------
-// Correct exposure when log2(N²/t) = sceneEV + log2(ISO/100) + ... ; offset > 0 means brighter than metered.
+// ---------- exposure ----------
 function solve(iso) {
-  const L = LIGHTS[S.light];
-  const target = L.ev + log2(iso / 100) - S.comp / 3; // EV the camera wants for the metered result
-  let si = S.si, ai = S.ai, rawN = null, rawT = null;
-  if (S.mode === 'Av') { rawT = APERTURES[ai] ** 2 / 2 ** target; si = nearest(SHUTTERS, rawT); }
-  else if (S.mode === 'Tv') { rawN = Math.sqrt(SHUTTERS[si] * 2 ** target); ai = nearest(APERTURES, rawN); }
-  else if (S.mode === 'P') {
-    const av = clamp(target / 2 - 1.5, 1, 8.9);
-    ai = nearest(APERTURES, Math.sqrt(2 ** av));
-    rawT = APERTURES[ai] ** 2 / 2 ** target; si = nearest(SHUTTERS, rawT);
-  }
-  return { si, ai, iso, rawN, rawT };
+  const L = LIGHTS[S.light], P = prog();
+  const target = L.ev + log2(iso / 100) - S.comp / 3;
+  let si = S.si, ai = S.ai, rawN = null;
+  if (P === 'Av') si = nearest(SHUTTERS, APERTURES[ai] ** 2 / 2 ** target);
+  else if (P === 'Tv') { rawN = Math.sqrt(SHUTTERS[si] * 2 ** target); ai = nearest(APERTURES, rawN); }
+  else if (P === 'P') { ai = nearest(APERTURES, Math.sqrt(2 ** clamp(target / 2 - 1.5, 1, 8.9))); si = nearest(SHUTTERS, APERTURES[ai] ** 2 / 2 ** target); }
+  if (S.flash && SHUTTERS[si] < 1 / 250 && P !== 'M' && P !== 'Tv') si = SHUTTERS.indexOf(1 / 250); // flash sync limit
+  return { si, ai, iso, rawN };
 }
 function compute() {
-  const L = LIGHTS[S.light];
+  const L = LIGHTS[S.light], P = prog();
   let r;
   if (!S.autoIso) r = solve(ISOS[S.ii]);
-  else if (S.mode === 'M') {
+  else if (P === 'M') {
     const N = APERTURES[S.ai], t = SHUTTERS[S.si];
-    const iso = 100 * 2 ** (log2(N * N / t) - L.ev + S.comp / 3);
-    r = { si: S.si, ai: S.ai, iso: ISOS[nearest(ISOS, clamp(iso, 100, 25600))] };
+    r = { si: S.si, ai: S.ai, iso: ISOS[nearest(ISOS, clamp(100 * 2 ** (log2(N * N / t) - L.ev + S.comp / 3), 50, 12800))] };
   } else {
     const handheld = S.tripod ? 30 : 1 / S.focal;
-    const maxIso = 12800;
-    r = null;
     for (const iso of ISOS) {
-      if (iso > maxIso) break;
-      const s = solve(iso);
-      const okT = S.mode === 'Tv' ? (s.rawN === null || s.rawN >= 1.4 / 1.12) : SHUTTERS[s.si] <= handheld * 1.12;
-      r = s;
-      if (okT) break;
+      if (iso < 100 && !(L.ev >= 13)) continue;
+      r = solve(iso);
+      const ok = P === 'Tv' ? (r.rawN === null || r.rawN >= 1.4 / 1.12) : SHUTTERS[r.si] <= handheld * 1.12;
+      if (ok) break;
     }
   }
   const t = SHUTTERS[r.si], N = APERTURES[r.ai], iso = r.iso;
-  const offset = L.ev + log2(iso / 100) - log2(N * N / t);
-  return { t, N, iso, si: r.si, ai: r.ai, offset };
+  return { t, N, iso, si: r.si, ai: r.ai, offset: L.ev + log2(iso / 100) - log2(N * N / t) };
 }
 
 // ---------- optics ----------
-function cocPx(D, N, f, s) { // blur circle diameter on the image in pixels for an object at D metres
-  const Dm = D * 1000, Sm = isFinite(s) ? s * 1000 : Infinity;
+function cocPx(D, N, f, s) {
+  const Dm = D * 1000, Sm = s * 1000;
   const b = (f * f / N) * Math.abs(1 / Dm - (isFinite(Sm) ? 1 / Sm : 0)) / (isFinite(Sm) ? (1 - f / Sm) : 1);
-  return b / SENSOR * W;
+  return b * PXMM;
 }
 function dof(N, f, s) {
-  const Hf = f * f / (N * COC) + f; // hyperfocal, mm
-  if (!isFinite(s)) return { near: Hf / 1000, far: Infinity, H: Hf / 1000 };
+  const Hf = f * f / (N * COC) + f;
+  if (!isFinite(s)) return { near: Hf / 1000, far: Infinity };
   const Sm = s * 1000;
-  const near = Sm * (Hf - f) / (Hf + Sm - 2 * f);
-  const far = Sm < Hf ? Sm * (Hf - f) / (Hf - Sm) : Infinity;
-  return { near: near / 1000, far: far / 1000, H: Hf / 1000 };
+  return { near: Sm * (Hf - f) / (Hf + Sm - 2 * f) / 1000, far: Sm < Hf ? Sm * (Hf - f) / (Hf - Sm) / 1000 : Infinity };
 }
 
-// ---------- scene drawing ----------
-let TINT = [1, 1, 1];
+// ---------- scene ----------
+let TINT = [1, 1, 1], LIFT = 1;
 function shade(hex, k = 1) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = ((n >> 16) & 255) * TINT[0] * k, g = ((n >> 8) & 255) * TINT[1] * k, b = (n & 255) * TINT[2] * k;
-  return `rgb(${clamp(r, 0, 255) | 0},${clamp(g, 0, 255) | 0},${clamp(b, 0, 255) | 0})`;
+  const n = parseInt(hex.slice(1), 16); k *= LIFT;
+  const r = ((n >> 16) & 255) * Math.min(1, TINT[0] * k), g = ((n >> 8) & 255) * Math.min(1, TINT[1] * k), b = (n & 255) * Math.min(1, TINT[2] * k);
+  return `rgb(${r | 0},${g | 0},${b | 0})`;
 }
+const HZ = H * .5; // horizon
 
 function drawFar(c, L) {
-  const g = c.createLinearGradient(0, 0, 0, H * .52);
+  const g = c.createLinearGradient(0, 0, 0, HZ);
   g.addColorStop(0, L.sky[0]); g.addColorStop(1, L.sky[1]);
-  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.fillStyle = g; c.fillRect(XA, YA, XB - XA, YB - YA);
   const rnd = mulberry(7);
   if (L.stars) {
-    for (let i = 0; i < 260; i++) { c.fillStyle = `rgba(255,255,255,${.3 + rnd() * .7})`; const s = rnd() < .9 ? 1.2 : 2.2; c.fillRect(rnd() * W, rnd() * H * .45, s, s); }
-    c.fillStyle = '#f2efe0'; c.beginPath(); c.arc(W * .82, H * .14, 24, 0, 7); c.fill();
-    c.fillStyle = L.sky[0]; c.beginPath(); c.arc(W * .82 + 10, H * .14 - 6, 21, 0, 7); c.fill();
+    for (let i = 0; i < 700; i++) { c.fillStyle = `rgba(255,255,255,${.3 + rnd() * .7})`; const s = rnd() < .9 ? 1.4 : 2.4; c.fillRect(XA + rnd() * (XB - XA), YA + rnd() * (HZ * .9 - YA), s, s); }
+    c.fillStyle = '#f2efe0'; c.beginPath(); c.arc(W * .8, H * .12, 26, 0, 7); c.fill();
+    c.fillStyle = L.sky[0]; c.beginPath(); c.arc(W * .8 + 11, H * .12 - 7, 23, 0, 7); c.fill();
   }
   if (L.sun) {
     const sx = W * L.sun.x, sy = H * L.sun.y;
-    const gg = c.createRadialGradient(sx, sy, 0, sx, sy, L.sun.r * 5);
+    const gg = c.createRadialGradient(sx, sy, 0, sx, sy, L.sun.r * 6);
     gg.addColorStop(0, L.sun.glow); gg.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = gg; c.fillRect(0, 0, W, H);
+    c.fillStyle = gg; c.fillRect(sx - L.sun.r * 6, sy - L.sun.r * 6, L.sun.r * 12, L.sun.r * 12);
     c.fillStyle = L.sun.c; c.beginPath(); c.arc(sx, sy, L.sun.r, 0, 7); c.fill();
   }
-  // clouds
-  if (S.light === 'sunny' || S.light === 'golden' || S.light === 'overcast') {
+  if (!L.lamps) {
     const cr = mulberry(21);
-    for (let i = 0; i < 6; i++) {
-      const cx = cr() * W, cy = H * (.08 + cr() * .22), s = 30 + cr() * 40;
-      c.fillStyle = S.light === 'overcast' ? 'rgba(235,237,240,.55)' : S.light === 'golden' ? 'rgba(255,214,190,.6)' : 'rgba(255,255,255,.85)';
+    c.fillStyle = S.light === 'overcast' ? 'rgba(235,237,240,.55)' : S.light === 'golden' ? 'rgba(255,214,190,.6)' : 'rgba(255,255,255,.85)';
+    for (let i = 0; i < 14; i++) {
+      const cx = XA + cr() * (XB - XA), cy = YA * .4 + cr() * (HZ * .6 - YA * .4), s = 30 + cr() * 45;
       for (let j = 0; j < 5; j++) { c.beginPath(); c.ellipse(cx + (j - 2) * s * .7, cy + Math.sin(j * 2.1) * s * .2, s * (.8 + cr() * .4), s * .45, 0, 0, 7); c.fill(); }
     }
   }
-  // two mountain ranges, with haze
-  const ranges = [{ y: .40, a: 70, col: '#8aa0c0', seed: 3 }, { y: .46, a: 55, col: '#6c86a6', seed: 9 }];
+  const ranges = [{ y: HZ - 70, a: 80, col: '#8aa0c0', seed: 3 }, { y: HZ - 25, a: 60, col: '#6c86a6', seed: 9 }];
   for (const m of ranges) {
     const r2 = mulberry(m.seed);
     c.fillStyle = shade(m.col);
-    c.beginPath(); c.moveTo(0, H);
-    let y = H * m.y;
-    for (let x = 0; x <= W; x += 20) { y = clamp(y + (r2() - .5) * m.a * .6, H * m.y - m.a, H * m.y + m.a * .5); c.lineTo(x, y); }
-    c.lineTo(W, H); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(XA, YB);
+    let y = m.y;
+    for (let x = XA; x <= XB; x += 20) { y = clamp(y + (r2() - .5) * m.a * .6, m.y - m.a, m.y + m.a * .5); c.lineTo(x, y); }
+    c.lineTo(XB, YB); c.closePath(); c.fill();
   }
 }
 
 function drawMid(c, L) {
-  // meadow
-  const g = c.createLinearGradient(0, H * .5, 0, H);
+  const g = c.createLinearGradient(0, HZ, 0, H);
   g.addColorStop(0, shade('#7ea75a')); g.addColorStop(1, shade('#4f8a36'));
   c.fillStyle = g;
-  c.beginPath(); c.moveTo(0, H * .54);
-  for (let x = 0; x <= W; x += 40) c.lineTo(x, H * .535 + Math.sin(x / 160) * 10);
-  c.lineTo(W, H); c.lineTo(0, H); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(XA, YB);
+  for (let x = XA; x <= XB; x += 40) c.lineTo(x, HZ + 5 + Math.sin(x / 160) * 10);
+  c.lineTo(XB, YB); c.closePath(); c.fill();
   // path in perspective
+  const top = HZ + 12, k = (YB - top) / (H - top);
   c.fillStyle = shade('#cdb88c');
-  c.beginPath(); c.moveTo(W * .47, H * .545); c.lineTo(W * .5, H * .545); c.lineTo(W * .78, H); c.lineTo(W * .28, H); c.closePath(); c.fill();
-  // tree line
+  c.beginPath(); c.moveTo(W * .5, top); c.lineTo(W * .535, top);
+  c.lineTo(W * .535 + (W * .85 - W * .535) * k, YB); c.lineTo(W * .5 - (W * .5 - W * .2) * k, YB); c.closePath(); c.fill();
   const r = mulberry(11);
-  for (let i = 0; i < 46; i++) {
-    const x = r() * W, base = H * .545 + Math.sin(x / 160) * 10, h = 40 + r() * 55;
-    if (x > W * .44 && x < W * .53) continue;
-    c.fillStyle = shade('#4a3322');
-    c.fillRect(x - 2, base - h * .3, 4, h * .3);
-    c.fillStyle = shade(r() < .5 ? '#2e6436' : '#3c7a3c');
-    if (r() < .55) { c.beginPath(); c.moveTo(x, base - h); c.lineTo(x - h * .28, base - h * .2); c.lineTo(x + h * .28, base - h * .2); c.closePath(); c.fill(); }
+  for (let i = 0; i < 110; i++) {
+    const x = XA + r() * (XB - XA), base = HZ + 12 + Math.sin(x / 160) * 10, h = 45 + r() * 60;
+    const conif = r() < .55, col = r() < .5 ? '#2e6436' : '#3c7a3c';
+    if (x > W * .46 && x < W * .58) continue;
+    c.fillStyle = shade('#4a3322'); c.fillRect(x - 2, base - h * .3, 4, h * .3);
+    c.fillStyle = shade(col);
+    if (conif) { c.beginPath(); c.moveTo(x, base - h); c.lineTo(x - h * .28, base - h * .2); c.lineTo(x + h * .28, base - h * .2); c.closePath(); c.fill(); }
     else { c.beginPath(); c.ellipse(x, base - h * .6, h * .3, h * .4, 0, 0, 7); c.fill(); }
   }
-  // small house
-  const hx = W * .7, hy = H * .545;
-  c.fillStyle = shade('#e7dcc6'); c.fillRect(hx, hy - 48, 70, 48);
-  c.fillStyle = shade('#9b3b2e'); c.beginPath(); c.moveTo(hx - 8, hy - 46); c.lineTo(hx + 35, hy - 78); c.lineTo(hx + 78, hy - 46); c.closePath(); c.fill();
+  const hx = W * .72, hy = HZ + 14;
+  c.fillStyle = shade('#e7dcc6'); c.fillRect(hx, hy - 52, 76, 52);
+  c.fillStyle = shade('#9b3b2e'); c.beginPath(); c.moveTo(hx - 8, hy - 50); c.lineTo(hx + 38, hy - 84); c.lineTo(hx + 84, hy - 50); c.closePath(); c.fill();
   c.fillStyle = L.lamps ? '#ffd27a' : shade('#5c6f86');
-  c.fillRect(hx + 10, hy - 36, 14, 14); c.fillRect(hx + 46, hy - 36, 14, 14);
-  c.fillStyle = shade('#5a3b26'); c.fillRect(hx + 28, hy - 26, 13, 26);
+  c.fillRect(hx + 10, hy - 40, 15, 15); c.fillRect(hx + 51, hy - 40, 15, 15);
+  c.fillStyle = shade('#5a3b26'); c.fillRect(hx + 31, hy - 28, 14, 28);
 }
 
-const LAMPS = [.13, .88];
+const LAMPS = [-.45, .12, .9, 1.45];
+const FENCE_Y = H * .63, LAMP_Y = H * .38;
 function drawFence(c, L) {
-  const y0 = H * .64;
   c.fillStyle = shade('#8a5a3a');
-  for (let x = -10; x < W + 20; x += 46) { c.fillRect(x, y0 - 34, 8, 52); }
+  for (let x = XA; x < XB; x += 46) c.fillRect(x, FENCE_Y - 34, 8, 52);
   c.fillStyle = shade('#9a6a46');
-  c.fillRect(0, y0 - 28, W, 7); c.fillRect(0, y0 - 6, W, 7);
+  c.fillRect(XA, FENCE_Y - 28, XB - XA, 7); c.fillRect(XA, FENCE_Y - 6, XB - XA, 7);
   for (const lx of LAMPS) {
     const x = W * lx;
-    c.fillStyle = shade('#2c3036'); c.fillRect(x - 4, H * .36, 8, y0 + 20 - H * .36);
-    c.fillRect(x - 18, H * .36 - 6, 36, 8);
+    c.fillStyle = shade('#2c3036'); c.fillRect(x - 4, LAMP_Y, 8, FENCE_Y + 20 - LAMP_Y); c.fillRect(x - 18, LAMP_Y - 6, 36, 8);
     c.fillStyle = L.lamps ? '#ffe3a0' : shade('#c9d0d8');
-    c.beginPath(); c.moveTo(x - 14, H * .36 + 2); c.lineTo(x + 14, H * .36 + 2); c.lineTo(x + 9, H * .36 + 20); c.lineTo(x - 9, H * .36 + 20); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(x - 14, LAMP_Y + 2); c.lineTo(x + 14, LAMP_Y + 2); c.lineTo(x + 9, LAMP_Y + 20); c.lineTo(x - 9, LAMP_Y + 20); c.closePath(); c.fill();
   }
 }
 function drawLights(c, L) {
   if (!L.lamps) return;
   for (const lx of LAMPS) {
-    const x = W * lx, y = H * .36 + 12;
+    const x = W * lx, y = LAMP_Y + 12;
     const g = c.createRadialGradient(x, y, 0, x, y, 120);
     g.addColorStop(0, `rgba(255,220,150,${.9 * L.lamps})`); g.addColorStop(.25, `rgba(255,190,110,${.35 * L.lamps})`); g.addColorStop(1, 'rgba(255,170,80,0)');
     c.fillStyle = g; c.fillRect(x - 130, y - 130, 260, 260);
-    const pool = c.createRadialGradient(x, H * .67, 0, x, H * .67, 120);
+    const py = FENCE_Y + 30, pool = c.createRadialGradient(x, py, 0, x, py, 130);
     pool.addColorStop(0, `rgba(255,200,130,${.25 * L.lamps})`); pool.addColorStop(1, 'rgba(255,200,130,0)');
-    c.fillStyle = pool; c.beginPath(); c.ellipse(x, H * .67, 140, 30, 0, 0, 7); c.fill();
+    c.fillStyle = pool; c.beginPath(); c.ellipse(x, py, 150, 32, 0, 0, 7); c.fill();
   }
-  // windows glow
-  c.fillStyle = `rgba(255,200,110,${.35 * L.lamps})`;
-  const hx = W * .7, hy = H * .545;
-  c.fillRect(hx + 6, hy - 40, 22, 22); c.fillRect(hx + 42, hy - 40, 22, 22);
 }
 
+const PERSON = { x: W * .52, feet: H * .86, h: H * .34 };
 function drawPerson(c, L) {
-  const fx = W * .52, fy = H * .885, s = H * .36 / 180;
-  const walking = S.speed > 0;
-  const lift = L.lamps ? 1.9 : 1; // people are lit a little by the lamps at night
-  const sh = (h, k = 1) => shade(h, k * lift);
-  if (L.shadow) {
-    c.fillStyle = `rgba(0,0,0,${L.shadow})`;
-    c.beginPath(); c.ellipse(fx + (S.light === 'golden' ? 60 : 18), fy, 60, 9, 0, 0, 7); c.fill();
-  }
+  const fx = PERSON.x, fy = PERSON.feet, s = PERSON.h / 195;
+  const sw = S.speed > 0 ? 0.38 : 0.04;
+  const sh = h => shade(h);
+  if (L.shadow) { c.fillStyle = `rgba(0,0,0,${L.shadow})`; c.beginPath(); c.ellipse(fx + (S.light === 'golden' ? 60 : 18), fy, 60, 9, 0, 0, 7); c.fill(); }
   c.save(); c.translate(fx, fy); c.scale(s, s);
   const limb = (x, y, len, ang, w, col) => { c.save(); c.translate(x, y); c.rotate(ang); c.fillStyle = col; c.beginPath(); c.roundRect(-w / 2, 0, w, len, w / 2); c.fill(); c.restore(); };
-  const sw = walking ? 0.38 : 0.04;
-  // back leg and arm
   limb(4, -92, 86, -sw, 17, sh('#243149'));
   limb(10, -148, 58, sw * 1.1, 12, sh('#b8392a'));
-  // backpack
   c.fillStyle = sh('#e8b92f'); c.beginPath(); c.roundRect(-34, -150, 22, 50, 6); c.fill();
-  // front leg
   limb(-2, -92, 86, sw, 17, sh('#2f3d5c'));
-  // shoes
-  c.fillStyle = sh('#1d1f24');
-  c.save(); c.translate(-2 + Math.sin(-sw) * -86, -92 + Math.cos(sw) * 86); c.beginPath(); c.roundRect(-10, -6, 26, 10, 4); c.fill(); c.restore();
-  // torso (jacket)
   c.fillStyle = sh('#d8452f'); c.beginPath(); c.roundRect(-18, -154, 38, 68, 10); c.fill();
   c.fillStyle = sh('#f1efe8'); c.fillRect(-1, -150, 3, 58);
-  // front arm
   limb(-4, -148, 58, -sw * 1.1, 12, sh('#e0503a'));
   c.fillStyle = sh('#e3aa86'); c.beginPath(); c.arc(-4 + Math.sin(sw * 1.1) * 58, -148 + Math.cos(sw * 1.1) * 58, 6, 0, 7); c.fill();
-  // neck + head
   c.fillStyle = sh('#d99c79'); c.fillRect(-4, -164, 10, 12);
   c.fillStyle = sh('#e3aa86'); c.beginPath(); c.ellipse(2, -176, 14, 16, 0, 0, 7); c.fill();
-  c.fillStyle = sh('#3a2518'); c.beginPath(); c.ellipse(-1, -186, 15, 9, -.2, 0, 7); c.fill();
-  c.fillRect(-14, -188, 8, 18);
+  c.fillStyle = sh('#3a2518'); c.beginPath(); c.ellipse(-1, -186, 15, 9, -.2, 0, 7); c.fill(); c.fillRect(-14, -188, 8, 18);
   c.fillStyle = sh('#1f1a17'); c.beginPath(); c.arc(11, -177, 1.8, 0, 7); c.fill();
-  // beanie
   c.fillStyle = sh('#2c8fa0'); c.beginPath(); c.ellipse(0, -191, 16, 9, -.15, Math.PI, 0); c.fill();
   c.restore();
 }
@@ -485,44 +413,46 @@ function drawFore(c) {
     for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; c.beginPath(); c.ellipse(tx + Math.cos(a) * pr * .8, ty + Math.sin(a) * pr * .8, pr * .6, pr * .38, a, 0, 7); c.fill(); }
     c.fillStyle = shade('#f3c43a'); c.beginPath(); c.arc(tx, ty, pr * .38, 0, 7); c.fill();
   };
-  for (let x = -20; x < W + 20; x += 38) tuft(x, H + 10, 40 + r() * 50);
+  const base = H + 20;
+  for (let row = 3; row >= 0; row--) for (let x = XA; x < XB; x += 38) tuft(x + row * 13, base - 10 + row * 110, 40 + r() * 50 + row * 30);
   const cols = ['#ffffff', '#e8588a', '#ffffff', '#9d7bdc', '#f4f1f8'];
-  for (let i = 0; i < 7; i++) flower(r() * W * .22, H + 20, 150 + r() * 170, cols[i % cols.length]);
-  for (let i = 0; i < 6; i++) flower(W * .82 + r() * W * .2, H + 20, 130 + r() * 190, cols[(i + 2) % cols.length]);
-  for (let x = -10; x < W * .24; x += 22) tuft(x, H + 20, 110 + r() * 90);
-  for (let x = W * .8; x < W + 20; x += 22) tuft(x, H + 20, 110 + r() * 90);
+  for (let i = 0; i < 12; i++) flower(XA + r() * (W * .2 - XA), base, 170 + r() * 190, cols[i % cols.length]);
+  for (let i = 0; i < 11; i++) flower(W * .84 + r() * (XB - W * .84), base, 150 + r() * 210, cols[(i + 2) % cols.length]);
+  for (let x = XA; x < W * .22; x += 22) tuft(x, base, 110 + r() * 90);
+  for (let x = W * .82; x < XB; x += 22) tuft(x, base, 110 + r() * 90);
 }
 
-// layers: [name, distance in metres, draw fn, blend]
 const LAYERS = [
   { key: 'far', d: 2000, draw: drawFar },
   { key: 'mid', d: 60, draw: drawMid },
   { key: 'fence', d: 14, draw: drawFence },
   { key: 'lights', d: 14, draw: drawLights, add: true },
-  { key: 'person', d: SUBJECT_D, draw: drawPerson, motion: true },
-  { key: 'fore', d: 1.4, draw: drawFore },
+  { key: 'person', d: SUBJECT_D, draw: drawPerson, motion: true, flash: 1 },
+  { key: 'fore', d: 1.4, draw: drawFore, flash: 1.25 },
 ];
 const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
-for (const l of LAYERS) l.cv = mk();
-const comp = mk(), tmp = mk(), tmp2 = mk();
-const small = document.createElement('canvas');
+for (const l of LAYERS) { l.cv = mk(); l.ctx = l.cv.getContext('2d', { willReadFrequently: true }); }
+const comp = mk(), tmp = mk(), tmp2 = mk(), small = document.createElement('canvas');
 let layerKey = '';
+const ZC = { x: W * .52, y: H * .62 };
+const zoomOf = () => S.focal / BASE_F;
 
-const ZC = { x: W * .52, y: H * .64 }; // zoom centre: the person
 function renderLayers() {
-  const key = `${S.focal}|${S.light}|${S.speed}`;
+  const key = `${S.focal}|${S.light}|${S.speed}|${S.flash}`;
   if (key === layerKey) return;
   layerKey = key;
-  const L = LIGHTS[S.light];
+  const L = LIGHTS[S.light], z = zoomOf();
   TINT = L.tint;
-  const z = S.focal / 24;
   for (const l of LAYERS) {
-    const c = l.cv.getContext('2d');
+    const c = l.ctx;
+    // flash lights near things; lamps lift the person a little at night
+    LIFT = l.flash && S.flash ? l.flash / Math.max(.2, (TINT[0] + TINT[1] + TINT[2]) / 3) / (l.d / SUBJECT_D) ** .5 : (l.key === 'person' && L.lamps ? 1.9 : 1);
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
-    c.setTransform(z, 0, 0, z, ZC.x * (1 - z), ZC.y * (1 - z)); // zoom around the person so they stay in frame
+    c.setTransform(z, 0, 0, z, ZC.x * (1 - z), ZC.y * (1 - z));
     l.draw(c, L);
     c.setTransform(1, 0, 0, 1, 0, 0);
   }
+  LIFT = 1;
 }
 
 const probe = document.createElement('canvas').getContext('2d');
@@ -533,70 +463,54 @@ function drawBlurred(ctx, src, sigma) {
   if (FILTER_OK) { ctx.filter = `blur(${sigma.toFixed(2)}px)`; ctx.drawImage(src, 0, 0); ctx.filter = 'none'; return; }
   const k = Math.max(1, sigma / 1.5);
   small.width = Math.max(1, Math.round(W / k)); small.height = Math.max(1, Math.round(H / k));
-  const s = small.getContext('2d'); s.imageSmoothingQuality = 'high';
+  const s = small.getContext('2d');
   s.clearRect(0, 0, small.width, small.height); s.drawImage(src, 0, 0, small.width, small.height);
   ctx.imageSmoothingQuality = 'high'; ctx.drawImage(small, 0, 0, W, H);
 }
-// Streak an image along (dx, dy) by averaging shifted copies.
 function streak(dst, src, dx, dy) {
   const c = dst.getContext('2d');
   c.clearRect(0, 0, W, H);
   const len = Math.hypot(dx, dy);
   if (len < .6) { c.drawImage(src, 0, 0); return; }
   const n = Math.min(48, Math.ceil(len / 1.5) + 1);
-  for (let i = 0; i < n; i++) {
-    const f = n === 1 ? 0 : i / (n - 1) - .5;
-    c.globalAlpha = 1 / (i + 1);
-    c.drawImage(src, dx * f, dy * f);
-  }
+  for (let i = 0; i < n; i++) { c.globalAlpha = 1 / (i + 1); c.drawImage(src, dx * (i / (n - 1) - .5), dy * (i / (n - 1) - .5)); }
   c.globalAlpha = 1;
 }
 
-// ---------- main render ----------
-const view = $('view'), vctx = view.getContext('2d', { willReadFrequently: true });
-let last = null, shakeAngle = .7, grainSeed = 1;
+// ---------- render ----------
+const view = $('view'), vctx = view.getContext('2d');
+let last = null, info = {}, shakeAngle = .7, grainSeed = 1;
 function render() {
   const r = last = compute();
-  const f = S.focal, s = focusDist(S.focusV), L = LIGHTS[S.light];
+  const f = S.focal, s = S.focus;
   renderLayers();
-
-  const diff = r.N > 8 ? (r.N - 8) * .07 : 0; // diffraction softening
+  const diff = r.N > 8 ? (r.N - 8) * .07 : 0;
   const cctx = comp.getContext('2d');
   cctx.globalCompositeOperation = 'source-over';
   cctx.clearRect(0, 0, W, H);
-  const info = {};
+  info = {};
   for (const l of LAYERS) {
-    const b = Math.min(cocPx(l.d, r.N, f, s), 120);
-    const sigma = Math.hypot(b / 2.4, diff);
+    const b = Math.min(cocPx(l.d, r.N, f, s), 140);
     info[l.key] = b;
     let src = l.cv;
     if (l.motion && S.speed > 0) {
-      const mm = f * (SPEEDS[S.speed].v * r.t) / l.d;
-      const px = Math.min(mm / SENSOR * W, 700);
-      info.motion = px;
-      streak(tmp2, l.cv, px, 0);
+      const px = Math.min(f * SPEEDS[S.speed].v * r.t / l.d * PXMM, 700);
+      info.motion = S.flash && r.t >= 1 / 250 ? px * .35 : px; // flash freezes part of the motion
+      streak(tmp2, l.cv, info.motion, 0);
       src = tmp2;
     }
     cctx.globalCompositeOperation = l.add ? 'lighter' : 'source-over';
-    drawBlurred(cctx, src, sigma);
+    drawBlurred(cctx, src, Math.hypot(b / 2.4, diff));
   }
   cctx.globalCompositeOperation = 'source-over';
-
-  // camera shake: roughly 0.02 rad/s of hand tremor
-  let shake = 0;
+  info.shake = 0;
   if (!S.tripod) {
-    shake = Math.min(f * r.t * .02 / SENSOR * W, 260);
-    if (shake > .6) {
-      streak(tmp, comp, Math.cos(shakeAngle) * shake, Math.sin(shakeAngle) * shake);
-      cctx.clearRect(0, 0, W, H); cctx.drawImage(tmp, 0, 0);
-    }
+    info.shake = Math.min(f * r.t * .02 * PXMM, 260);
+    if (info.shake > .6) { streak(tmp, comp, Math.cos(shakeAngle) * info.shake, Math.sin(shakeAngle) * info.shake); cctx.clearRect(0, 0, W, H); cctx.drawImage(tmp, 0, 0); }
   }
-  info.shake = shake;
 
-  // sensor: exposure gain, highlight shoulder, ISO noise
   const img = cctx.getImageData(0, 0, W, H), d = img.data;
-  const gain = 2 ** r.offset;
-  const lut = new Uint8ClampedArray(256);
+  const gain = 2 ** r.offset, lut = new Uint8ClampedArray(256);
   for (let i = 0; i < 256; i++) {
     let lin = (i / 255) ** 2.2 * gain;
     if (lin > .85) lin = .85 + .15 * (1 - Math.exp(-(lin - .85) / .15));
@@ -609,170 +523,291 @@ function render() {
   for (let p = 0; p < d.length; p += 4) {
     let R = lut[d[p]], G = lut[d[p + 1]], B = lut[d[p + 2]];
     if (sigma > .4) {
-      const lum = (R * 3 + G * 6 + B) / 2550;
-      const k = sigma * (1.35 - lum * .8);
-      const n = (rand() + rand() + rand() - 1.5) * 2 * k;
-      const cn = sigma > 6 ? k * .35 : 0;
+      const k = sigma * (1.35 - (R * 3 + G * 6 + B) / 2550 * .8);
+      const n = (rand() + rand() + rand() - 1.5) * 2 * k, cn = sigma > 6 ? k * .35 : 0;
       R += n + (rand() - .5) * cn; G += n + (rand() - .5) * cn; B += n + (rand() - .5) * cn * 1.4;
     }
     d[p] = R; d[p + 1] = G; d[p + 2] = B; d[p + 3] = 255;
     hist[Math.min(63, ((d[p] * 3 + d[p + 1] * 6 + d[p + 2]) / 10) >> 2)]++;
   }
   vctx.putImageData(img, 0, 0);
-
-  updateUI(r, info, s);
-  drawMeter(r.offset);
-  drawHist(hist);
+  updateUI(r);
+  if (!$('histo').hidden) drawHist(hist);
 }
-
-// ---------- UI ----------
-const sl = { shutter: $('shutter'), aperture: $('aperture'), iso: $('iso'), comp: $('comp'), focal: $('focal'), focus: $('focus') };
-const NOTES = {
-  M: 'Ручной режим: вы задаёте выдержку, диафрагму и ISO сами. Экспонометр подскажет, светлее или темнее кадр нормы.',
-  Av: 'Приоритет диафрагмы: вы выбираете f‑число, камера подбирает выдержку.',
-  Tv: 'Приоритет выдержки: вы выбираете выдержку, камера подбирает диафрагму.',
-  P: 'Программный режим: камера сама выбирает выдержку и диафрагму. Вы можете менять ISO и экспокоррекцию.',
-};
-function updateUI(r, info, s) {
-  const autoT = S.mode === 'Av' || S.mode === 'P', autoN = S.mode === 'Tv' || S.mode === 'P';
-  sl.shutter.value = r.si; sl.aperture.value = r.ai; sl.iso.value = nearest(ISOS, r.iso);
-  sl.shutter.disabled = autoT; sl.aperture.disabled = autoN; sl.iso.disabled = S.autoIso;
-  sl.comp.disabled = S.mode === 'M' && !S.autoIso;
-  const set = (id, txt, auto) => { const o = $(id); o.textContent = txt; o.classList.toggle('is-auto', !!auto); };
-  set('oShutter', fmtT(r.t), autoT); set('oAperture', fmtN(r.N), autoN); set('oIso', r.iso, S.autoIso);
-  set('oComp', fmtComp(S.comp)); set('oFocal', `${S.focal} мм`); set('oFocus', fmtM(s));
-  document.querySelectorAll('#dial button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
-  $('modeNote').textContent = NOTES[S.mode];
-
-  $('lcdMode').textContent = S.mode;
-  $('lcdT').innerHTML = `<small>ВЫД</small>${fmtT(r.t)}`;
-  $('lcdN').innerHTML = `<small>ДИАФ</small>${fmtN(r.N)}`;
-  $('lcdIso').innerHTML = `<small>ISO</small>${r.iso}`;
-  $('lcdF').innerHTML = `<small>ФР</small>${S.focal}мм`;
-  $('lcdComp').innerHTML = `<small>EV</small>${fmtComp(S.comp)}`;
-  $('lcdT').classList.toggle('auto', autoT); $('lcdN').classList.toggle('auto', autoN); $('lcdIso').classList.toggle('auto', S.autoIso);
-
-  const g = dof(r.N, S.focal, s);
-  $('dofText').textContent = `ГРИП ${fmtM(g.near)} – ${fmtM(g.far)}`;
-  $('afPoint').classList.toggle('ok', info.person < 3.5);
-
-  // tips
-  const tips = [];
-  const o = r.offset;
-  if (o > 1.7) tips.push(['w', 'Сильный пересвет: светлые участки выбиты в белое. Укоротите выдержку, закройте диафрагму или снизьте ISO.']);
-  else if (o > .6) tips.push(['w', `Кадр светлее нормы на ${o.toFixed(1)} EV.`]);
-  else if (o < -1.7) tips.push(['w', 'Сильный недосвет: тени провалились в чёрное. Удлините выдержку, откройте диафрагму или поднимите ISO.']);
-  else if (o < -.6) tips.push(['w', `Кадр темнее нормы на ${(-o).toFixed(1)} EV.`]);
-  else tips.push(['', 'Экспозиция в норме.']);
-  if ((info.motion || 0) > 3) {
-    const need = SHUTTERS.find(t => S.focal * SPEEDS[S.speed].v * t / SUBJECT_D / SENSOR * W < 2) || 1 / 8000;
-    tips.push(['w', `Человек смазан на ${Math.round(info.motion)} px. Чтобы «заморозить» движение, нужна выдержка около ${fmtT(need)} или короче.`]);
-  } else if (S.speed > 0) tips.push(['', 'Движение заморожено: выдержка достаточно короткая.']);
-  if (info.shake > 2) tips.push(['w', `Шевелёнка: кадр смазан от дрожания рук. Правило: выдержка не длиннее 1/${S.focal} с при ${S.focal} мм, или поставьте камеру на штатив.`]);
-  if (info.person > 3.5) tips.push(['w', 'Человек не в фокусе. Нажмите «Фокус на человека» или сдвиньте дистанцию к 5 м.']);
-  else if (info.far > 14 && info.fore > 14) tips.push(['', 'Малая глубина резкости: фон и передний план размыты, человек выделен.']);
-  else if (info.far < 3 && info.fore < 4) tips.push(['', 'Большая глубина резкости: резко почти всё, от цветов до гор.']);
-  if (r.iso >= 3200) tips.push(['w', `На ISO ${r.iso} заметен цифровой шум.`]);
-  if (r.N >= 16) tips.push(['w', `На ${fmtN(r.N)} изображение слегка мягче из‑за дифракции.`]);
-  $('tips').innerHTML = tips.map(([c, t]) => `<li class="${c}">${t}</li>`).join('');
-}
-
-const meter = $('meter'), mctx = meter.getContext('2d');
-function drawMeter(o) {
-  const w = meter.width, h = meter.height, cs = getComputedStyle(document.documentElement);
-  const fg = cs.getPropertyValue('--fg').trim(), dim = cs.getPropertyValue('--dim').trim(), acc = cs.getPropertyValue('--accent').trim(), warn = cs.getPropertyValue('--warn').trim();
-  mctx.clearRect(0, 0, w, h);
-  const x0 = 40, x1 = w - 40, X = v => x0 + (v + 3) / 6 * (x1 - x0);
-  mctx.font = '500 20px "IBM Plex Mono", monospace'; mctx.textAlign = 'center'; mctx.textBaseline = 'top';
-  for (let i = -9; i <= 9; i++) {
-    const x = X(i / 3), major = i % 3 === 0;
-    mctx.fillStyle = major ? fg : dim; mctx.fillRect(x - 1, major ? 6 : 12, 2, major ? 20 : 10);
-    if (major) mctx.fillText(i === 0 ? '0' : (i > 0 ? '+' : '−') + Math.abs(i / 3), x, 58);
-  }
-  mctx.fillStyle = dim; mctx.fillRect(x0, 26, x1 - x0, 2);
-  const v = clamp(o, -3, 3), x = X(v);
-  mctx.fillStyle = Math.abs(o) > .6 ? warn : acc;
-  mctx.beginPath(); mctx.moveTo(x, 30); mctx.lineTo(x - 9, 50); mctx.lineTo(x + 9, 50); mctx.closePath(); mctx.fill();
-  if (Math.abs(o) > 3) { mctx.font = '600 26px "IBM Plex Mono", monospace'; mctx.fillText(o > 0 ? '▶' : '◀', o > 0 ? w - 18 : 18, 4); }
-  $('meterVal').textContent = `${o >= 0 ? '+' : '−'}${Math.abs(o).toFixed(1)} EV`;
-}
-const histC = $('hist'), hctx = histC.getContext('2d');
-function drawHist(hist) {
-  const w = histC.width, h = histC.height, cs = getComputedStyle(document.documentElement);
-  hctx.clearRect(0, 0, w, h);
-  let max = 1; for (let i = 1; i < 63; i++) max = Math.max(max, hist[i]);
-  hctx.fillStyle = cs.getPropertyValue('--line').trim();
-  for (let i = 1; i < 4; i++) hctx.fillRect(w * i / 4, 0, 1, h);
-  const bw = w / 64;
-  for (let i = 0; i < 64; i++) {
-    const v = Math.min(1, hist[i] / max);
-    hctx.fillStyle = (i === 0 || i === 63) && hist[i] > max * .05 ? cs.getPropertyValue('--warn').trim() : cs.getPropertyValue('--fg').trim();
-    hctx.globalAlpha = (i === 0 || i === 63) ? 1 : .75;
-    hctx.fillRect(i * bw, h - v * (h - 4), bw - 1, v * (h - 4));
-  }
-  hctx.globalAlpha = 1;
-}
-
 let pending = false;
 function schedule() { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; render(); }); } }
 
-// wire controls
-sl.shutter.addEventListener('input', e => { S.si = +e.target.value; schedule(); });
-sl.aperture.addEventListener('input', e => { S.ai = +e.target.value; schedule(); });
-sl.iso.addEventListener('input', e => { S.ii = +e.target.value; schedule(); });
-sl.comp.addEventListener('input', e => { S.comp = +e.target.value; schedule(); });
-sl.focal.addEventListener('input', e => { S.focal = +e.target.value; schedule(); });
-sl.focus.addEventListener('input', e => { S.focusV = +e.target.value; schedule(); });
-$('autoIso').addEventListener('change', e => { if (!e.target.checked && last) S.ii = nearest(ISOS, last.iso); S.autoIso = e.target.checked; schedule(); });
-$('tripod').addEventListener('change', e => { S.tripod = e.target.checked; schedule(); });
-$('showGrid').addEventListener('change', e => { $('gridLines').hidden = !e.target.checked; });
-$('afBtn').addEventListener('click', () => { S.focusV = focusV(SUBJECT_D); sl.focus.value = S.focusV; schedule(); });
-document.querySelectorAll('#dial button').forEach(b => b.addEventListener('click', () => {
-  if (last) { S.si = last.si; S.ai = last.ai; } // switching modes keeps the current values
-  S.mode = b.dataset.mode; schedule();
-}));
-function chips(el, items, get, setv) {
-  el.innerHTML = '';
-  items.forEach(([val, label]) => {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
-    b.addEventListener('click', () => { setv(val); sync(); schedule(); });
-    el.appendChild(b);
-  });
-  const sync = () => [...el.children].forEach((b, i) => b.setAttribute('aria-pressed', items[i][0] === get()));
-  sync();
+// ---------- dial (ruler) ----------
+const DIALS = {
+  ev:       { name: 'Экспозиция', glyph: '±', label: 'Экспоз.', values: Array.from({ length: 19 }, (_, i) => i - 9), fmt: fmtComp, major: i => (i - 9) % 3 === 0,
+              get: () => S.comp + 9, set: i => { S.comp = i - 9; }, enabled: () => !(prog() === 'M' && !S.autoIso), note: () => prog() === 'M' && !S.autoIso ? 'в ПРО включите авто‑ISO' : '' },
+  shutter:  { name: 'Выдержка', glyph: '1/s', label: 'Выдержка', values: SHUTTERS, fmt: fmtT, major: i => i % 3 === 0,
+              get: () => last.si, set: i => { S.si = i; }, enabled: () => prog() === 'M' || prog() === 'Tv', note: () => (prog() === 'M' || prog() === 'Tv') ? '' : 'авто' },
+  aperture: { name: 'Диафрагма', glyph: 'ƒ', label: 'Диафр.', values: APERTURES, fmt: fmtN, major: i => i % 3 === 0,
+              get: () => last.ai, set: i => { S.ai = i; }, enabled: () => prog() === 'M' || prog() === 'Av', note: () => (prog() === 'M' || prog() === 'Av') ? '' : 'авто' },
+  iso:      { name: 'ISO', glyph: 'ISO', label: 'ISO', values: ['A', ...ISOS], fmt: v => v === 'A' ? 'АВТО' : v, major: i => i === 0 || (i - 1) % 3 === 0,
+              get: () => S.autoIso ? 0 : nearest(ISOS, last.iso) + 1, set: i => { S.autoIso = i === 0; if (i) S.ii = i - 1; }, enabled: () => true, note: () => S.autoIso ? `сейчас ${last.iso}` : '' },
+  focus:    { name: 'Фокус', glyph: 'AF', label: 'Фокус', values: FOCI, fmt: fmtM, major: i => [0, 6, 10, 14, 18, 23].includes(i),
+              get: () => nearest(FOCI, S.focus), set: i => { S.focus = FOCI[i]; }, enabled: () => true, note: () => { const g = dof(last.N, S.focal, S.focus); return `резко ${fmtM(g.near)}–${fmtM(g.far)}`; } },
+  zoom:     { name: 'Зум', glyph: '×', label: 'Зум', values: FOCALS, fmt: v => `${fmtZ(v)} · ${v} мм`, tick: v => fmtZ(v), major: i => [0, 6, 12, 16, 23].includes(i),
+              get: () => nearest(FOCALS, S.focal), set: i => { S.focal = FOCALS[i]; }, enabled: () => true, note: () => '' },
+  light:    { name: 'Свет', glyph: '☀', label: 'Свет', values: LIGHT_KEYS, fmt: k => LIGHTS[k].name, tick: k => LIGHTS[k].name, step: 84, major: () => true,
+              get: () => LIGHT_KEYS.indexOf(S.light), set: i => { S.light = LIGHT_KEYS[i]; }, enabled: () => true, note: () => `EV ${LIGHTS[S.light].ev}` },
+  motion:   { name: 'Объект', glyph: '→', label: 'Объект', values: SPEEDS.map((_, i) => i), fmt: i => SPEEDS[i].name, tick: i => SPEEDS[i].name, step: 84, major: () => true,
+              get: () => S.speed, set: i => { S.speed = i; }, enabled: () => true, note: () => SPEEDS[S.speed].v ? `${SPEEDS[S.speed].v} м/с` : '' },
+};
+let activeDial = null, dragging = null;
+const track = $('track'), ruler = $('ruler');
+function buildTrack() {
+  const D = DIALS[activeDial], step = D.step || 16;
+  track.innerHTML = D.values.map((v, i) => {
+    const maj = D.major(i);
+    const lab = maj ? `<b>${D.tick ? D.tick(v) : D.fmt(v)}</b>` : '';
+    return `<span class="tick${maj ? ' major' : ''}" style="left:${i * step}px">${lab}</span>`;
+  }).join('');
 }
-chips($('lightChips'), Object.entries(LIGHTS).map(([k, v]) => [k, `${v.name} · EV ${v.ev}`]), () => S.light, v => { S.light = v; });
-chips($('speedChips'), SPEEDS.map((s, i) => [i, s.v ? `${s.name} · ${s.v} м/с` : s.name]), () => S.speed, v => { S.speed = v; });
+function placeTrack(idx, animate) {
+  const D = DIALS[activeDial], step = D.step || 16;
+  track.style.transition = animate ? 'transform .2s ease' : 'none';
+  track.style.transform = `translateX(${-idx * step}px)`;
+}
+function openDial(key) {
+  activeDial = activeDial === key ? null : key;
+  $('dial').hidden = !activeDial;
+  if (activeDial) { buildTrack(); ruler.setAttribute('aria-label', DIALS[activeDial].name); }
+  syncTools(); updateDial(true);
+}
+function updateDial(animate) {
+  if (!activeDial || !last) return;
+  const D = DIALS[activeDial], i = D.get();
+  $('dialName').textContent = D.name;
+  $('dialVal').textContent = D.fmt(D.values[i]);
+  $('dialNote').textContent = D.note();
+  ruler.classList.toggle('off', !D.enabled());
+  ruler.setAttribute('aria-valuetext', D.fmt(D.values[i]));
+  if (!dragging) placeTrack(i, animate);
+}
+function setDial(i) {
+  const D = DIALS[activeDial];
+  i = clamp(i, 0, D.values.length - 1);
+  if (i === D.get()) return;
+  D.set(i); schedule();
+}
+ruler.addEventListener('pointerdown', e => {
+  if (!activeDial || !DIALS[activeDial].enabled()) { toast('В этом режиме значение выбирает камера'); return; }
+  ruler.setPointerCapture(e.pointerId);
+  dragging = { x: e.clientX, i: DIALS[activeDial].get() };
+});
+ruler.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const D = DIALS[activeDial], step = D.step || 16, dx = e.clientX - dragging.x;
+  track.style.transition = 'none';
+  const pos = clamp(dragging.i * step - dx, 0, (D.values.length - 1) * step);
+  track.style.transform = `translateX(${-pos}px)`;
+  setDial(Math.round(pos / step));
+});
+const endDrag = () => { if (dragging) { dragging = null; updateDial(true); } };
+ruler.addEventListener('pointerup', endDrag); ruler.addEventListener('pointercancel', endDrag);
+ruler.addEventListener('wheel', e => { if (!activeDial || !DIALS[activeDial].enabled()) return; e.preventDefault(); setDial(DIALS[activeDial].get() + Math.sign(e.deltaY || e.deltaX)); }, { passive: false });
+ruler.addEventListener('keydown', e => {
+  if (!activeDial || !DIALS[activeDial].enabled()) return;
+  if (e.key === 'ArrowLeft') { setDial(DIALS[activeDial].get() - 1); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { setDial(DIALS[activeDial].get() + 1); e.preventDefault(); }
+});
 
-// shutter + contact sheet
+// tools row
+const TOOL_KEYS = ['ev', 'shutter', 'aperture', 'iso', 'focus', 'zoom', 'light', 'motion', 'tripod', 'grid'];
+$('tools').innerHTML = TOOL_KEYS.map(k => {
+  const D = DIALS[k];
+  const glyph = D ? D.glyph : k === 'tripod' ? '⊥' : '#';
+  const label = D ? D.label : k === 'tripod' ? 'Штатив' : 'Сетка';
+  return `<button type="button" class="tool" data-k="${k}" aria-pressed="false"><span class="ring">${glyph}</span><span>${label}</span></button>`;
+}).join('');
+$('tools').addEventListener('click', e => {
+  const b = e.target.closest('.tool'); if (!b) return;
+  const k = b.dataset.k;
+  if (k === 'tripod') { S.tripod = !S.tripod; toast(S.tripod ? 'Штатив: камера неподвижна' : 'Съёмка с рук'); schedule(); }
+  else if (k === 'grid') { S.grid = !S.grid; $('gridlines').hidden = !S.grid; }
+  else openDial(k);
+  syncTools();
+});
+function syncTools() {
+  document.querySelectorAll('.tool').forEach(b => {
+    const k = b.dataset.k;
+    b.setAttribute('aria-pressed', k === activeDial || (k === 'tripod' && S.tripod) || (k === 'grid' && S.grid));
+    b.classList.toggle('on', (k === 'ev' && S.comp !== 0) || (k === 'iso' && !S.autoIso) || (k === 'focus' && S.focus !== SUBJECT_D));
+  });
+}
+$('chev').addEventListener('click', () => {
+  const open = $('tools').hidden;
+  $('tools').hidden = !open; $('chev').setAttribute('aria-expanded', open);
+  if (!open && activeDial) openDial(activeDial);
+});
+
+// zoom pills
+const PILLS = [13, 26, 52, 77];
+$('zoom').innerHTML = PILLS.map(f => `<button type="button" data-f="${f}">${fmtZ(f).replace('×', '')}</button>`).join('');
+$('zoom').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.focal = +b.dataset.f; schedule(); });
+function syncZoom() {
+  let act = 0; PILLS.forEach((f, i) => { if (S.focal >= f) act = i; });
+  [...$('zoom').children].forEach((b, i) => {
+    b.classList.toggle('on', i === act);
+    b.textContent = i === act ? fmtZ(S.focal) : fmtZ(PILLS[i]).replace('×', '');
+  });
+}
+
+// modes carousel
+const modeTrack = $('modeTrack');
+modeTrack.innerHTML = MODES.map(m => `<button type="button" data-m="${m.key}">${m.label}</button>`).join('');
+function setMode(key) {
+  if (last) { S.si = last.si; S.ai = last.ai; }
+  S.mode = key;
+  if (key === 'port') { S.ai = APERTURES.indexOf(1.8); S.focal = Math.max(S.focal, 52); S.focus = SUBJECT_D; toast('Портрет: ƒ1.8, фон размыт'); }
+  if (key === 'photo') { S.autoIso = true; }
+  schedule(); syncModes();
+}
+function syncModes() {
+  const btns = [...modeTrack.children];
+  btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.m === S.mode));
+  const b = btns.find(b => b.dataset.m === S.mode), w = $('modes').clientWidth;
+  modeTrack.style.transform = `translateX(${w / 2 - (b.offsetLeft + b.offsetWidth / 2)}px)`;
+}
+modeTrack.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
+function stepMode(dir) { const i = MODES.findIndex(m => m.key === S.mode); const n = MODES[clamp(i + dir, 0, MODES.length - 1)]; if (n.key !== S.mode) setMode(n.key); }
+let mSwipe = null;
+$('modes').addEventListener('pointerdown', e => { mSwipe = e.clientX; });
+$('modes').addEventListener('pointerup', e => { if (mSwipe !== null && Math.abs(e.clientX - mSwipe) > 30) stepMode(e.clientX < mSwipe ? 1 : -1); mSwipe = null; });
+addEventListener('resize', () => { syncModes(); });
+
+// viewfinder: tap to focus, vertical drag for exposure, horizontal swipe for modes
+const vf = $('vf'), af = $('af');
+let vfPtr = null, afTimer = 0;
+vf.addEventListener('pointerdown', e => {
+  if (e.target.closest('.overlay')) return;
+  vf.setPointerCapture(e.pointerId);
+  vfPtr = { x: e.clientX, y: e.clientY, comp: S.comp, moved: null };
+});
+vf.addEventListener('pointermove', e => {
+  if (!vfPtr) return;
+  const dx = e.clientX - vfPtr.x, dy = e.clientY - vfPtr.y;
+  if (!vfPtr.moved && Math.hypot(dx, dy) > 10) vfPtr.moved = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
+  if (vfPtr.moved === 'v' && DIALS.ev.enabled()) {
+    const c = clamp(vfPtr.comp - Math.round(dy / 14), -9, 9);
+    if (c !== S.comp) { S.comp = c; schedule(); }
+    af.classList.remove('dim'); clearTimeout(afTimer); afTimer = setTimeout(() => af.classList.add('dim'), 2000);
+  }
+});
+vf.addEventListener('pointerup', e => {
+  if (!vfPtr) return;
+  const p = vfPtr; vfPtr = null;
+  if (p.moved === 'h' && Math.abs(e.clientX - p.x) > 50) { stepMode(e.clientX < p.x ? 1 : -1); return; }
+  if (p.moved) return;
+  const rc = vf.getBoundingClientRect();
+  const u = (e.clientX - rc.left) / rc.width, v = (e.clientY - rc.top) / rc.height;
+  const cx = clamp(Math.round(u * W), 0, W - 1), cy = clamp(Math.round(v * H), 0, H - 1);
+  let hit = LAYERS[0];
+  for (const key of ['fore', 'person', 'fence', 'mid']) {
+    const l = LAYERS.find(l => l.key === key);
+    if (l.ctx.getImageData(cx, cy, 1, 1).data[3] > 40) { hit = l; break; }
+  }
+  S.focus = hit.d >= 1000 ? Infinity : hit.d;
+  S.comp = DIALS.ev.enabled() ? 0 : S.comp;
+  af.style.left = `${u * 100}%`; af.style.top = `${v * 100}%`;
+  af.classList.remove('dim', 'pop'); void af.offsetWidth; af.classList.add('pop');
+  clearTimeout(afTimer); afTimer = setTimeout(() => af.classList.add('dim'), 2000);
+  schedule();
+});
+let lpTimer = 0;
+vf.addEventListener('pointerdown', e => { if (e.target.closest('.overlay')) return; clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (vfPtr && !vfPtr.moved) { $('afTag').hidden = false; setTimeout(() => $('afTag').hidden = true, 1800); } }, 650); });
+vf.addEventListener('pointerup', () => clearTimeout(lpTimer));
+
+// top bar buttons
+$('flashBtn').addEventListener('click', () => {
+  S.flash = !S.flash;
+  $('flashBtn').classList.toggle('on', S.flash); $('flashBtn').setAttribute('aria-pressed', S.flash);
+  toast(S.flash ? 'Вспышка вкл.' : 'Вспышка выкл.'); schedule();
+});
+$('histBtn').addEventListener('click', () => {
+  const h = $('histo'); h.hidden = !h.hidden;
+  $('histBtn').classList.toggle('on', !h.hidden); $('histBtn').setAttribute('aria-pressed', !h.hidden); schedule();
+});
+$('cycleBtn').addEventListener('click', () => {
+  S.light = LIGHT_KEYS[(LIGHT_KEYS.indexOf(S.light) + 1) % LIGHT_KEYS.length];
+  toast(`${LIGHTS[S.light].name} · EV ${LIGHTS[S.light].ev}`); schedule();
+});
+
+let toastTimer = 0;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1400); }
+
+// ---------- per-frame UI ----------
+function updateUI(r) {
+  const P = prog();
+  const aT = P === 'Av' || P === 'P', aN = P === 'Tv' || P === 'P';
+  const o = r.offset, bad = Math.abs(o) > .6;
+  $('readout').innerHTML =
+    `<span class="${aT ? 'auto' : ''}">${fmtT(r.t)}</span><span class="${aN ? 'auto' : ''}">${fmtN(r.N)}</span>` +
+    `<span class="${S.autoIso ? 'auto' : ''}">ISO ${r.iso}</span><span>${S.focal} мм</span>` +
+    `<span class="meter${bad ? ' bad' : ''}">${o > -.05 ? '+' : '−'}${Math.abs(o).toFixed(1)} EV</span>`;
+  $('sun').style.top = `${clamp(50 - S.comp * 5, 0, 100)}%`;
+  syncZoom(); syncTools(); updateDial(false);
+
+  let hint = '';
+  if (o > 1.7) hint = '<b>Пересвет.</b> Короче выдержка, закрыть диафрагму или ниже ISO';
+  else if (o < -1.7) hint = '<b>Недосвет.</b> Длиннее выдержка, открыть диафрагму или выше ISO';
+  else if ((info.motion || 0) > 3) {
+    const need = SHUTTERS.find(t => S.focal * SPEEDS[S.speed].v * t / SUBJECT_D * PXMM < 2) || 1 / 8000;
+    hint = `<b>Смаз движения.</b> Нужна выдержка ${fmtT(need)} или короче`;
+  }
+  else if (info.shake > 2) hint = `<b>Шевелёнка.</b> Выдержка длиннее 1/${S.focal} с — нужен штатив`;
+  else if (info.person > 4) hint = '<b>Человек не в фокусе.</b> Коснитесь его на экране';
+  else if (r.iso >= 3200) hint = `<b>Шум.</b> ISO ${r.iso}`;
+  else if (S.mode === 'port' && info.far > 12) hint = 'Портрет · фон размыт';
+  $('hint').innerHTML = hint; $('hint').hidden = !hint;
+}
+function drawHist(hist) {
+  const c = $('histo'), x = c.getContext('2d'), w = c.width, h = c.height;
+  x.clearRect(0, 0, w, h);
+  let max = 1; for (let i = 1; i < 63; i++) max = Math.max(max, hist[i]);
+  x.fillStyle = 'rgba(255,255,255,.8)';
+  for (let i = 0; i < 64; i++) { const v = Math.min(1, hist[i] / max) * (h - 12); x.fillRect(8 + i * (w - 16) / 64, h - 6 - v, (w - 16) / 64 - 1, v); }
+}
+
+// ---------- shooting + gallery ----------
 const shots = [];
+let gIdx = 0;
 function shoot() {
   shakeAngle = Math.random() * Math.PI; grainSeed = (Math.random() * 1e9) | 0;
   render();
-  const fl = $('flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
-  const cap = `${fmtT(last.t)} · ${fmtN(last.N)} · ISO ${last.iso} · ${S.focal} мм`;
-  shots.unshift({ src: view.toDataURL('image/jpeg', .88), cap });
-  if (shots.length > 12) shots.pop();
-  const fr = $('frames'); fr.innerHTML = '';
-  shots.forEach(sh => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'frame';
-    b.innerHTML = `<img alt="Снимок: ${sh.cap}" src="${sh.src}"><span>${sh.cap}</span>`;
-    b.addEventListener('click', () => { $('lbImg').src = sh.src; $('lbImg').alt = sh.cap; $('lbCap').textContent = sh.cap; $('lightbox').hidden = false; });
-    fr.appendChild(b);
-  });
-  $('empty').hidden = shots.length > 0;
+  const bo = $('blackout'); bo.classList.remove('go'); void bo.offsetWidth; bo.classList.add('go');
+  shots.unshift({ src: view.toDataURL('image/jpeg', .9), cap: `${fmtT(last.t)} · ${fmtN(last.N)} · ISO ${last.iso} · ${S.focal} мм · ${LIGHTS[S.light].name}` });
+  if (shots.length > 30) shots.pop();
+  const ti = $('thumbImg'); ti.src = shots[0].src; ti.hidden = false;
+  const tb = $('thumb'); tb.classList.remove('pop'); void tb.offsetWidth; tb.classList.add('pop');
+}
+function showGallery(i) {
+  gIdx = i;
+  $('gallery').hidden = false;
+  $('gEmpty').hidden = shots.length > 0; $('gImg').hidden = !shots.length;
+  $('gCount').textContent = shots.length ? `${i + 1} из ${shots.length}` : '';
+  if (shots.length) { $('gImg').src = shots[i].src; $('gImg').alt = shots[i].cap; $('gCap').textContent = shots[i].cap; } else $('gCap').textContent = '';
+  $('gStrip').innerHTML = shots.map((s, k) => `<button type="button" class="${k === i ? 'on' : ''}" data-i="${k}" aria-label="Снимок ${k + 1}"><img src="${s.src}" alt=""></button>`).join('');
 }
 $('shoot').addEventListener('click', shoot);
-$('lightbox').addEventListener('click', () => { $('lightbox').hidden = true; });
+$('thumb').addEventListener('click', () => showGallery(0));
+$('gDone').addEventListener('click', () => { $('gallery').hidden = true; });
+$('gStrip').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showGallery(+b.dataset.i); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') $('lightbox').hidden = true;
-  if (e.code === 'Space' && !/INPUT|BUTTON/.test(document.activeElement?.tagName || '')) { e.preventDefault(); shoot(); }
+  if (!$('gallery').hidden) {
+    if (e.key === 'Escape') $('gallery').hidden = true;
+    if (e.key === 'ArrowRight' && gIdx < shots.length - 1) showGallery(gIdx + 1);
+    if (e.key === 'ArrowLeft' && gIdx > 0) showGallery(gIdx - 1);
+    return;
+  }
+  if (document.activeElement === ruler) return;
+  if (e.code === 'Space' || e.key === 'Enter' && document.activeElement === document.body) { e.preventDefault(); shoot(); }
 });
 
-// initial state
-S.focusV = focusV(SUBJECT_D);
-sl.focal.value = S.focal; sl.focus.value = S.focusV; sl.comp.value = S.comp;
 render();
-if (document.fonts) document.fonts.ready.then(() => { layerKey = ''; render(); });
+syncModes();
 })();
 </script>
