@@ -1,0 +1,32 @@
+# Reads the Telegram channels about once a minute and publishes dashboard/events.json on the gh-pages branch.
+# Each run loops for ~14 minutes; the schedule starts a new one every 10 and the newer run replaces the older.
+name: Telegram feed
+on:
+  schedule: [{ cron: '*/10 * * * *' }]
+  workflow_dispatch:
+concurrency: { group: feed, cancel-in-progress: true }
+permissions: { contents: write }
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: gh-pages }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Check whether dimap.live allows embedding
+        if: github.event_name == 'workflow_dispatch'
+        run: curl -sSI https://dimap.live/ | grep -iE '^(x-frame-options|content-security-policy)' || echo "no frame restrictions"
+      - name: Collect
+        run: |
+          git config user.name "feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          end=$((SECONDS + 14 * 60))
+          while [ $SECONDS -lt $end ]; do
+            if node scripts/collect.mjs && ! git diff --quiet dashboard/events.json; then
+              git commit -qm "Update feed" dashboard/events.json
+              git push -q || { git pull -q --rebase && git push -q; } || echo "push failed"
+            fi
+            sleep 60
+          done
