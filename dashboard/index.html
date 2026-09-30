@@ -107,11 +107,10 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .radar .ringlbl{fill:var(--dim);font-size:6px;font-weight:700}
 .radar .town circle{fill:#3a4150}.radar .town text{fill:#6c7486;font-size:6.2px;font-weight:700}
 .radar .home circle{fill:var(--txt)}.radar .home text{fill:var(--txt);font-size:7px;font-weight:800}
-.radar .sweep{fill:url(#sweep);transform-origin:0 0;animation:sweep 6s linear infinite}
-@keyframes sweep{to{transform:rotate(360deg)}}
-.radar .tg{transition:transform 1.8s linear}
-.radar .tg .pulse{fill:none;stroke:var(--red);stroke-width:1;animation:tping 1.6s ease-out infinite}
-@keyframes tping{from{r:4;opacity:1}to{r:14;opacity:0}}
+.radar .sweep path{fill:#4c8dff}
+.radar .sweep line{stroke:#4c8dff;stroke-opacity:.6;stroke-width:.8}
+.radar .tg{transition:transform 1.8s linear,opacity .4s}
+.radar .tg .pulse{fill:none;stroke:var(--red);stroke-width:1}
 .radar .cnt{font-size:6px;font-weight:800;fill:#111}
 
 /* targets list */
@@ -583,24 +582,48 @@ function renderTargets() {
     <div class="ds">${a.areaOnly ? '<span>область</span>' : `<b>${Math.round(a.dist)}</b><span>км ${COMPASS[sector(a.from)]}</span>`}</div></div>`).join('');
 }
 
+// The radar's grid and sweep are drawn once (a redraw would restart the sweep); targets are kept by id and moved,
+// so they glide between updates. The sweep turns with SMIL around (0,0): CSS transform-origin on SVG differs in Safari.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+let radarKey = '', radarTargets = new Map();
+function wedge(a1, a2) {
+  const p = a => `${(Math.sin(rad(a)) * 100).toFixed(2)} ${(-Math.cos(rad(a)) * 100).toFixed(2)}`;
+  return `M0 0 L${p(a1)} A100 100 0 0 1 ${p(a2)} Z`;
+}
 function renderRadar(list) {
   const R = 100, k = R / RADAR_KM;
   const xy = p => { const x = (p.lon - LOC.lon) * 111.32 * Math.cos(rad(LOC.lat)) * k, y = -(p.lat - LOC.lat) * 110.57 * k; return [x, y]; };
-  let svg = `<svg viewBox="-112 -112 224 224"><defs><radialGradient id="sweep" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="scale(100)"><stop offset="0" stop-color="#4c8dff" stop-opacity=".0"/><stop offset="1" stop-color="#4c8dff" stop-opacity=".14"/></radialGradient></defs>`;
-  svg += `<path class="sweep" d="M0 0 L0 -100 A100 100 0 0 1 70.7 -70.7 Z"/>`;
-  for (const km of [50, 100, 150, 200]) svg += `<circle class="ring" r="${km * k}"/><text class="ringlbl" x="2" y="${-km * k + 7}">${km}</text>`;
-  svg += `<text class="ringlbl" x="-3" y="-103" style="font-size:7px;fill:#8b93a4">Пн</text>`;
-  for (const [n, lat, lon] of [['Житомир', ZHYTOMYR.lat, ZHYTOMYR.lon], ...TOWNS]) { const [x, y] = xy({ lat, lon }); const d = Math.hypot(x, y); if (d > R - 4 || d < 3) continue; svg += `<g class="town"><circle cx="${x}" cy="${y}" r="1.6"/><text x="${x + 3}" y="${y + 2}">${n}</text></g>`; }
   const here = W().here.length > 16 ? W().here.slice(0, 15) + '…' : W().here;
-  svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">${esc(here)}</text></g>`;
+  const key = [LOC.lat, LOC.lon, here].join('|');
+  if (radarKey !== key || !$('radar').querySelector('svg')) {
+    radarKey = key; radarTargets = new Map();
+    let svg = '<svg viewBox="-112 -112 224 224">';
+    svg += `<g class="sweep"><path d="${wedge(-50, -28)}" fill-opacity=".04"/><path d="${wedge(-28, -12)}" fill-opacity=".08"/><path d="${wedge(-12, 0)}" fill-opacity=".15"/><line x1="0" y1="0" x2="0" y2="-100"/>`
+      + '<animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="6s" repeatCount="indefinite"/></g>';
+    for (const km of [50, 100, 150, 200]) svg += `<circle class="ring" r="${km * k}"/><text class="ringlbl" x="2" y="${-km * k + 7}">${km}</text>`;
+    svg += '<text class="ringlbl" x="-3" y="-103" style="font-size:7px;fill:#8b93a4">Пн</text>';
+    for (const [n, lat, lon] of [['Житомир', ZHYTOMYR.lat, ZHYTOMYR.lon], ...TOWNS]) { const [x, y] = xy({ lat, lon }); const d = Math.hypot(x, y); if (d > R - 4 || d < 3) continue; svg += `<g class="town"><circle cx="${x}" cy="${y}" r="1.6"/><text x="${x + 3}" y="${y + 2}">${n}</text></g>`; }
+    svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">${esc(here)}</text></g><g class="tgts"></g></svg>`;
+    $('radar').innerHTML = svg;
+  }
+  const layer = $('radar').querySelector('.tgts'), seen = new Set();
   for (const a of list) {
     if (a.areaOnly) continue;
+    const id = String(a.t.id ?? `${a.label}|${a.t.lat}|${a.t.lon}`);
+    seen.add(id);
     let [x, y] = xy(a.p); const d = Math.hypot(x, y);
     if (d > R) { x *= R / d; y *= R / d; }
-    const arrow = a.hdg !== null ? `<line x1="0" y1="0" x2="${Math.sin(rad(a.hdg)) * 11}" y2="${-Math.cos(rad(a.hdg)) * 11}" stroke="${a.color}" stroke-width="1.4" stroke-linecap="round"/>` : '';
-    svg += `<g class="tg" style="transform:translate(${x.toFixed(1)}px,${y.toFixed(1)}px)${a.advisory || a.stale ? ';opacity:.5' : ''}">${a.toMe?.direct ? '<circle class="pulse" r="4"/>' : ''}${arrow}<circle r="3.6" fill="${a.color}" stroke="#101218" stroke-width="1"/>${a.count ? `<text class="cnt" x="-1.7" y="2">${a.count}</text>` : ''}</g>`;
+    let g = radarTargets.get(id);
+    const pos = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+    if (!g) { g = document.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'tg'); g.style.transform = pos; layer.appendChild(g); radarTargets.set(id, g); }
+    else g.style.transform = pos;
+    g.style.opacity = a.advisory || a.stale ? '.5' : '1';
+    const arrow = a.hdg !== null ? `<line x1="0" y1="0" x2="${(Math.sin(rad(a.hdg)) * 11).toFixed(1)}" y2="${(-Math.cos(rad(a.hdg)) * 11).toFixed(1)}" stroke="${a.color}" stroke-width="1.4" stroke-linecap="round"/>` : '';
+    const pulse = a.toMe?.direct ? '<circle class="pulse" r="4"><animate attributeName="r" from="4" to="14" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" from="1" to="0" dur="1.6s" repeatCount="indefinite"/></circle>' : '';
+    const inner = `${pulse}${arrow}<circle r="3.6" fill="${a.color}" stroke="#101218" stroke-width="1"/>${a.count ? `<text class="cnt" x="-1.7" y="2">${a.count}</text>` : ''}`;
+    if (g.__inner !== inner) { g.innerHTML = inner; g.__inner = inner; }
   }
-  $('radar').innerHTML = svg + '</svg>';
+  for (const [id, g] of radarTargets) if (!seen.has(id)) { g.remove(); radarTargets.delete(id); }
 }
 
 // Similar posts from several channels within 8 minutes become one item.
