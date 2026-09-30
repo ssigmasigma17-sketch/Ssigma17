@@ -140,8 +140,8 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 
 <div id="dlg"><div class="box">
   <h3>Джерело даних</h3>
-  <p>Необов’язково. Адреса вашого Cloudflare Worker — тоді повідомлення з’являтимуться за 15–30 секунд замість 1–3 хвилин.</p>
-  <input id="feed" placeholder="автоматично" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <p>Залиште порожнім, щоб використовувати стандартний Cloudflare Worker. Сюди можна вставити адресу іншого.</p>
+  <input id="feed" placeholder="zhytomyr-events.ponapon309.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false">
   <div class="row"><button id="cancel">Скасувати</button><button class="pri" id="save">Зберегти</button></div>
 </div></div>
 
@@ -208,8 +208,9 @@ function merge(list){
   d.alert=d.districts[d.district]||null;
   return d;
 }
+const DEFAULT_FEED='https://zhytomyr-events.ponapon309.workers.dev/';
 async function load(){
-  const feed=store.get('feed');
+  const feed=store.get('feed')||DEFAULT_FEED;
   const res=await Promise.allSettled([getJson('events.json?t='+Date.now()),...(feed?[getJson(feed)]:[])]);
   const ok=res.filter(r=>r.status==='fulfilled').map(r=>r.value);
   if(!ok.length){renderStatus(true);return}
