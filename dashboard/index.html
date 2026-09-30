@@ -194,6 +194,29 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 #dlg summary{font-weight:700;font-size:14px;color:var(--mut);cursor:pointer}
 #dlg input[type=url]{width:100%;font:inherit;font-size:14px;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:10px;outline:none}
 #dlg .done{width:100%;margin-top:16px;padding:13px;border-radius:12px;font-weight:800;background:var(--blue);color:#fff}
+.dz.me{box-shadow:inset 0 0 0 1.5px currentColor}
+.where{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px;padding:10px 12px;border-radius:14px;background:var(--card);font-size:13.5px;font-weight:700;color:var(--mut);text-align:left}
+.where b{color:var(--txt);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.where span{color:var(--blue);font-size:12.5px}
+.locsec{padding-bottom:12px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+.loccur{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;background:var(--card)}
+.loccur .pin{font-size:20px}
+.loccur b{display:block;font-size:15px;font-weight:800}
+.loccur small{display:block;font-size:12px;color:var(--mut);font-weight:600;margin-top:2px}
+.locgps{width:100%;margin-top:10px;padding:11px;border-radius:12px;background:var(--card2);font-weight:800;font-size:14px}
+.locform{display:flex;gap:8px;margin-top:10px}
+.locform input{flex:1;min-width:0;font:inherit;font-size:14.5px;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px;outline:none}
+.locform input:focus{border-color:var(--blue)}
+.locform button{flex:none;padding:0 14px;border-radius:12px;background:var(--blue);color:#fff;font-weight:800;font-size:14px}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.quick button{padding:6px 10px;border-radius:99px;background:var(--card);font-size:12.5px;font-weight:700;color:var(--mut)}
+.quick button.on{background:var(--txt);color:#111}
+#locRes .res{display:block;width:100%;text-align:left;padding:10px 4px;border-top:1px solid var(--line)}
+#locRes .res b{display:block;font-size:14px;font-weight:800}
+#locRes .res small{display:block;font-size:12px;color:var(--mut);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#locRes .msg{padding:10px 4px 0;font-size:13px;color:var(--mut);font-weight:600}
+.locnote{display:block;margin-top:10px;font-size:11.5px;color:var(--dim);line-height:1.45}
+.locnote a{color:var(--mut)}
 </style>
 </head>
 <body>
@@ -221,6 +244,7 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
   </nav>
   <div id="panes">
     <div class="pane" id="pane-targets">
+      <button class="where" id="whereBtn">📍 Відстані від: <b id="whereName">Житомир</b><span>змінити</span></button>
       <div class="card"><div class="radar" id="radar"></div></div>
       <div class="card" id="tlist"><div class="skel"></div></div>
       <p class="foot">Цілі й офіційні тривоги: <a href="https://neptun.in.ua/" target="_blank" rel="noopener">Карта повітряних тривог — NEPTUN</a>. Положення цілей приблизне й прогнозується за курсом між оновленнями. Це не офіційне оповіщення — орієнтуйтесь на сирени.</p>
@@ -233,7 +257,7 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
       <p class="foot">Повідомлення автоматично збираються з відкритих Telegram-каналів про Житомирщину й можуть бути неточними. Однакові повідомлення з кількох каналів об’єднано.</p>
     </div>
     <div class="pane" id="pane-alerts">
-      <div class="card"><h3>Житомир за добу <span id="histNote"></span></h3><div class="bar" id="bar"></div><div class="ticks" id="ticks"></div><div class="stats" id="stats"></div></div>
+      <div class="card"><h3><span id="histTitle" style="margin:0;color:inherit;text-transform:inherit;letter-spacing:inherit">Житомир за добу</span> <span id="histNote"></span></h3><div class="bar" id="bar"></div><div class="ticks" id="ticks"></div><div class="stats" id="stats"></div></div>
       <div class="card"><h3>Райони області</h3><div id="dlist"></div></div>
       <div class="card"><h3>Джерела</h3><div id="slist"></div></div>
       <p class="foot">Статус — офіційні тривоги за даними <a href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a>, рівень і тип загрози — з репостів офіційних сповіщень у місцевих каналах. Якщо NEPTUN недоступний, статус береться лише з каналів.</p>
@@ -243,6 +267,14 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 
 <div id="dlg"><div class="box">
   <h3>Налаштування</h3>
+  <div class="locsec" id="locSec">
+    <div class="loccur"><div class="pin">📍</div><div><b id="locName">Житомир</b><small id="locInfo">Житомирський район</small></div></div>
+    <button class="locgps" id="locGps" type="button">📡 Моє місце за GPS</button>
+    <form class="locform" id="locForm"><input id="locQ" type="search" placeholder="Місто, село, вулиця або 50.25, 28.66" enterkeyhint="search" autocomplete="off" autocorrect="off"><button type="submit">Знайти</button></form>
+    <div class="quick" id="locQuick"></div>
+    <div id="locRes"></div>
+    <small class="locnote">Від цього місця рахуються відстані, курс «на вас» і тривога у вашому районі. Зберігається лише на цьому телефоні. Пошук адрес — © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</small>
+  </div>
   <label class="opt"><span>Звук, коли починається тривога<small>Працює, поки сторінка відкрита</small></span><input type="checkbox" class="sw" id="optSound"></label>
   <label class="opt" id="notifyRow"><span>Сповіщення браузера<small>Android і комп’ютер; на iPhone недоступно</small></span><input type="checkbox" class="sw" id="optNotify"></label>
   <div class="opt"><span>Карта</span><div class="mini" id="mapSel"><button data-map="dimap">dimap</button><button data-map="neptun">NEPTUN</button></div></div>
@@ -253,12 +285,16 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 <script>
 'use strict';
 /* ---------- constants ---------- */
-const HOME = { lat: 50.2547, lon: 28.6587 };
+// The place distances, "course at you" and the alert status are counted from. Default: Zhytomyr city centre.
+const ZHYTOMYR = { name: 'Житомир', short: 'Житомир', place: 'Житомир', lat: 50.2547, lon: 28.6587, raion: 'Житомирський район', oblast: 'Житомирська область', city: true, custom: false };
+const QUICK = [['Житомир', 50.2547, 28.6587, 'Житомирський район'], ['Бердичів', 49.8993, 28.6025, 'Бердичівський район'],
+  ['Коростень', 50.9536, 28.6389, 'Коростенський район'], ['Звягель', 50.5941, 27.6166, 'Звягельський район'],
+  ['Малин', 50.77, 29.24, 'Коростенський район'], ['Овруч', 51.3243, 28.8038, 'Коростенський район'],
+  ['Коростишів', 50.319, 29.0555, 'Житомирський район'], ['Радомишль', 50.4951, 29.233, 'Житомирський район']];
 const NEPTUN = 'https://neptun.in.ua';
 const DEFAULT_FEED = 'https://zhytomyr-events.ponapon309.workers.dev/';
 const MAPS = { dimap: 'https://dimap.live/', neptun: 'https://neptun.in.ua/embed/map?lang=uk' };
 const DISTRICTS = ['Житомирський', 'Бердичівський', 'Коростенський', 'Звягельський'];
-const CITY_AREAS = ['Житомирська громада', 'Житомирський', 'Житомирська область'];
 const SHORT = { Житомирський: 'Житомир', Бердичівський: 'Бердичів', Коростенський: 'Коростень', Звягельський: 'Звягель' };
 const TOWNS = [['Коростень', 50.9536, 28.6389], ['Бердичів', 49.8993, 28.6025], ['Звягель', 50.5941, 27.6166], ['Малин', 50.77, 29.24],
   ['Овруч', 51.3243, 28.8038], ['Радомишль', 50.4951, 29.233], ['Київ', 50.4501, 30.5234],
@@ -297,6 +333,21 @@ const N = { threats: new Map(), alerts: null, alertsAt: 0, dataAt: 0, ws: null, 
 
 const q = new URLSearchParams(location.search).get('feed');
 if (q) { store.set('feed', q); history.replaceState(null, '', location.pathname); }
+
+/* ---------- my place ---------- */
+const norm = s => String(s || '').toLowerCase().replace(/[ʼ'’`]/g, '').replace(/^(м\.|місто)\s*/, '').replace(/\s+/g, ' ').trim();
+let LOC = (() => { try { const l = JSON.parse(store.get('loc') || 'null'); if (l && Number.isFinite(l.lat) && Number.isFinite(l.lon)) return l; } catch {} return ZHYTOMYR; })();
+// Wording: the default place is "Житомир", a chosen one is "вас".
+const W = () => LOC.custom ? { to: 'на вас', until: 'до вас', from: 'від вас', here: LOC.short || LOC.name } : { to: 'на Житомир', until: 'до Житомира', from: 'від Житомира', here: 'Житомир' };
+// Channel-derived alert areas covering my place (they exist only for Zhytomyr oblast).
+function myAreas() {
+  if (!/житомир/.test(norm(LOC.oblast))) return [];
+  const d = DISTRICTS.find(x => norm(LOC.raion).startsWith(norm(x).slice(0, 6)));
+  return [LOC.city && 'Житомирська громада', d, 'Житомирська область'].filter(Boolean);
+}
+const myDistrict = () => myAreas().find(k => DISTRICTS.includes(k));
+// Posts about my place: Zhytomyr and its suburbs for the city, otherwise the settlement's name.
+const mineEvent = e => LOC.city ? !!e.city : !!(LOC.place && (e.places || []).includes(LOC.place));
 
 /* ---------- Telegram sources: GitHub file (history) + Cloudflare Worker (live) ---------- */
 async function getJson(url) { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return r.json(); }
@@ -376,22 +427,30 @@ function officialAreas() {
   return areas;
 }
 
+// Official alert for my own raion / oblast, anywhere in Ukraine.
+function officialMine() {
+  if (!neptunFresh()) return null;
+  const r = LOC.raion && N.alerts.raions.find(x => norm(x.name) === norm(LOC.raion) && (!x.oblast || !LOC.oblast || norm(x.oblast) === norm(LOC.oblast)));
+  const o = LOC.oblast && N.alerts.oblasts.find(x => norm(x.name) === norm(LOC.oblast));
+  const hits = [r, o].filter(Boolean);
+  return { on: hits.length > 0, since: hits.map(h => h.since).filter(Boolean).sort()[0] };
+}
+
 /* ---------- status ---------- */
-function tgCity(areas) {
-  const known = CITY_AREAS.map(k => areas[k]).filter(Boolean);
+function tgMine(areas) {
+  const known = myAreas().map(k => areas[k]).filter(Boolean);
   if (!known.length) return null;
   const on = known.filter(a => a.state === 'on');
   if (on.length) return { state: 'on', since: on.map(a => a.since).sort()[0], level: on.find(a => a.level)?.level, threat: on.find(a => a.threat)?.threat };
   return { state: 'off', since: known.map(a => a.since).sort().at(-1) };
 }
-function cityStatus() {
-  const tg = tgCity(S.tg.districts);
-  const off = officialAreas();
+function myStatus() {
+  const tg = tgMine(S.tg.districts);
+  const off = officialMine();
   if (!off) return tg && { ...tg, source: 'Telegram' };
-  const on = CITY_AREAS.map(k => off[k]).filter(Boolean);
-  if (on.length) {
+  if (off.on) {
     const tgOn = tg && tg.state === 'on' ? tg : null;
-    return { state: 'on', since: on.map(a => a.since).filter(Boolean).sort()[0] || tgOn?.since, level: tgOn?.level, threat: tgOn?.threat, source: 'NEPTUN' };
+    return { state: 'on', since: off.since || tgOn?.since, level: tgOn?.level, threat: tgOn?.threat, source: 'NEPTUN' };
   }
   return { state: 'off', since: tg && tg.state === 'off' ? tg.since : S.offSeen, source: 'NEPTUN' };
 }
@@ -409,7 +468,7 @@ const levelCls = a => a && a.state === 'on' && a.level === 'жовтий' ? ' ye
 /* ---------- targets ---------- */
 function analyze(t, now) {
   const [label, icon, color] = TYPES[t.type] || TYPES.unknown;
-  const base = { t, label: t.title || label, icon, color, count: t.count > 1 ? t.count : 0, advisory: !!t.advisory, stale: t.status === 'stale', inOblast: /житомир/i.test(t.region || '') };
+  const base = { t, label: t.title || label, icon, color, count: t.count > 1 ? t.count : 0, advisory: !!t.advisory, stale: t.status === 'stale', inOblast: !!LOC.oblast && norm(t.region) === norm(LOC.oblast) };
   if (t.areaOnly || !Number.isFinite(t.lat) || !Number.isFinite(t.lon)) return { ...base, areaOnly: true };
   const hdg = Number.isFinite(t.velocity?.bearingDeg) ? t.velocity.bearingDeg : (Number.isFinite(t.heading) ? t.heading : null);
   const speed = t.velocity?.speedKmh || 0;
@@ -417,14 +476,14 @@ function analyze(t, now) {
   const anchor = Date.parse(t.confirmedAt || t.updatedAt || '') || now;
   const hours = Math.min(Math.max(0, (now - anchor) / 3600e3), 1 / 3); // dead reckoning, at most 20 minutes ahead
   if (hdg !== null && speed > 0 && !base.stale) p = dest(p, hdg, speed * hours);
-  const dist = distKm(HOME, p), from = bearing(HOME, p);
-  let toCity = null;
+  const dist = distKm(LOC, p), from = bearing(LOC, p);
+  let toMe = null;
   if (hdg !== null) {
-    const diff = Math.abs(((hdg - bearing(p, HOME)) % 360 + 540) % 360 - 180);
+    const diff = Math.abs(((hdg - bearing(p, LOC)) % 360 + 540) % 360 - 180);
     const miss = dist * Math.sin(rad(diff)), along = dist * Math.cos(rad(diff));
-    if (along > 0 && miss < 25 && dist < 300) toCity = { miss, direct: miss < 10, eta: speed > 0 ? along / speed * 60 : null };
+    if (along > 0 && miss < 25 && dist < 300) toMe = { miss, direct: miss < 10, eta: speed > 0 ? along / speed * 60 : null };
   }
-  return { ...base, p, dist, from, hdg, speed, toCity };
+  return { ...base, p, dist, from, hdg, speed, toMe };
 }
 function nearbyTargets() {
   const now = Date.now(), out = [];
@@ -433,13 +492,13 @@ function nearbyTargets() {
     const a = analyze(t, now);
     if (a.areaOnly ? a.inOblast : (a.dist <= RANGE_KM || a.inOblast)) out.push(a);
   }
-  const rank = a => a.areaOnly ? 1e6 : a.toCity?.direct ? (a.toCity.eta ?? a.dist) - 1e4 : a.dist;
+  const rank = a => a.areaOnly ? 1e6 : a.toMe?.direct ? (a.toMe.eta ?? a.dist) - 1e4 : a.dist;
   return out.sort((a, b) => rank(a) - rank(b));
 }
 function targetLine(a) {
   if (a.areaOnly) return 'на область, без точного місця';
   if (a.advisory) return 'спостереження, без сигналу ховатися';
-  if (a.toCity) return (a.toCity.direct ? '<b>курс на Житомир</b>' : `може пройти за ~${Math.round(a.toCity.miss)} км`) + (a.toCity.eta ? ` · ~${Math.max(1, Math.round(a.toCity.eta))} хв` : '');
+  if (a.toMe) return (a.toMe.direct ? `<b>курс ${W().to}</b>` : `може пройти за ~${Math.round(a.toMe.miss)} км ${W().from}`) + (a.toMe.eta ? ` · ~${Math.max(1, Math.round(a.toMe.eta))} хв` : '');
   if (a.hdg !== null) return 'курс ' + COMPASS_TO[sector(a.hdg)] + (a.speed ? ` · ${Math.round(a.speed)} км/год` : '');
   return 'курс невідомий';
 }
@@ -457,36 +516,38 @@ function render() {
 }
 
 function renderStatus() {
-  const st = cityStatus(), b = document.body;
+  const st = myStatus(), b = document.body;
   if (!st) { b.className = ''; $('title').textContent = S.src.gh.ok === false && S.src.worker.ok === false && !neptunFresh() ? 'Немає зв’язку' : 'Статус невідомий'; $('sub').textContent = 'Чекаємо на дані про тривогу'; }
   else {
     const on = st.state === 'on';
     b.className = (on ? 'on' : 'off') + levelCls(st);
     $('title').textContent = on ? (st.threat || 'Повітряна тривога') : 'Відбій тривоги';
     const lvl = on && st.level ? st.level[0].toUpperCase() + st.level.slice(1) + ' рівень · ' : '';
-    $('sub').textContent = on ? lvl + (st.since ? 'триває ' + dur(Date.now() - Date.parse(st.since)) + ' · з ' + hm(st.since) : 'Житомир') : st.since ? 'Тиша ' + dur(Date.now() - Date.parse(st.since)) + ' · з ' + hm(st.since) : 'Житомир · тривоги немає';
-    document.title = (on ? '🔴 Тривога' : '🟢 Відбій') + ' — Житомир';
+    const at = LOC.custom ? '📍 ' + W().here + ' · ' : '';
+    $('sub').textContent = at + (on ? lvl + (st.since ? 'триває ' + dur(Date.now() - Date.parse(st.since)) + ' · з ' + hm(st.since) : W().here) : st.since ? 'Тиша ' + dur(Date.now() - Date.parse(st.since)) + ' · з ' + hm(st.since) : 'тривоги немає');
+    document.title = (on ? '🔴 Тривога' : '🟢 Відбій') + ' — ' + W().here;
     if (S.lastOn !== null && S.lastOn !== on) { if (on) alarmNotify(st); else S.offSeen = new Date().toISOString(); }
     S.lastOn = on;
   }
   const ds = districtStates();
-  $('districts').innerHTML = DISTRICTS.map(n => { const a = ds[n]; return `<span class="dz ${a ? a.state : ''}${levelCls(a)}" title="${esc(n)} район">${esc(SHORT[n])}</span>`; }).join('');
+  const mine = myDistrict();
+  $('districts').innerHTML = DISTRICTS.map(n => { const a = ds[n]; return `<span class="dz ${a ? a.state : ''}${levelCls(a)}${n === mine ? ' me' : ''}" title="${esc(n)} район">${esc(SHORT[n])}</span>`; }).join('');
 }
 
 function renderBrief() {
   const el = $('brief'), targets = nearbyTargets().filter(a => !a.advisory && !a.areaOnly);
-  const direct = targets.find(a => a.toCity?.direct);
+  const direct = targets.find(a => a.toMe?.direct);
   const top = direct || targets.find(a => a.dist <= 120);
   if (top) {
     const more = targets.length - 1;
     el.className = 'brief' + (direct ? ' danger' : '');
     const where = [`${Math.round(top.dist)} км ${COMPASS_TO[sector(top.from)]}`, top.t.locality || top.t.district].filter(Boolean).join(' · ');
-    const eta = top.toCity?.eta ? Math.max(1, Math.round(top.toCity.eta)) : null;
-    const course = top.toCity ? (top.toCity.direct ? (eta ? `~${eta} хв до Житомира` : 'курс на Житомир') : `пройде за ~${Math.round(top.toCity.miss)} км` + (eta ? ` · ~${eta} хв` : '')) : targetLine(top);
+    const eta = top.toMe?.eta ? Math.max(1, Math.round(top.toMe.eta)) : null;
+    const course = top.toMe ? (top.toMe.direct ? (eta ? `~${eta} хв ${W().until}` : `курс ${W().to}`) : `пройде за ~${Math.round(top.toMe.miss)} км` + (eta ? ` · ~${eta} хв` : '')) : targetLine(top);
     el.innerHTML = `<span class="ico">${top.icon}</span><span class="two"><b>${esc(top.label)}${top.count ? ' ×' + top.count : ''} · ${course}</b><small>${esc(where)}${more > 0 ? ` · ще ${more} ${more === 1 ? 'ціль' : more < 5 ? 'цілі' : 'цілей'}` : ''}</small></span><a class="by" href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a>`;
     return;
   }
-  const recent = S.tg.events.filter(e => e.type !== 'calm' && mins(e.time) < 15 && e.city)[0];
+  const recent = S.tg.events.filter(e => e.type !== 'calm' && mins(e.time) < 15 && mineEvent(e))[0];
   const last = recent || S.tg.events.find(e => mins(e.time) < 180);
   if (last) {
     el.className = 'brief' + (recent ? ' danger' : '');
@@ -515,7 +576,7 @@ function renderTargets() {
       : `<div class="empty"><div>🛡️</div>У радіусі ${RANGE_KM} км цілей немає</div>`;
     return;
   }
-  el.innerHTML = list.map(a => `<div class="tgt${a.toCity?.direct ? ' danger' : ''}${a.advisory || a.stale ? ' calmish' : ''}" style="--c:${a.color}">
+  el.innerHTML = list.map(a => `<div class="tgt${a.toMe?.direct ? ' danger' : ''}${a.advisory || a.stale ? ' calmish' : ''}" style="--c:${a.color}">
     <div class="ic">${a.icon}</div>
     <div class="bd"><div class="t1">${esc(a.label)}${a.count ? ' ×' + a.count : ''}<small>${esc(a.t.locality || a.t.district || a.t.region || '')}</small></div>
     <div class="t2">${targetLine(a)}${a.stale ? ' · давно не оновлювалась' : ''}</div></div>
@@ -524,19 +585,20 @@ function renderTargets() {
 
 function renderRadar(list) {
   const R = 100, k = R / RADAR_KM;
-  const xy = p => { const x = (p.lon - HOME.lon) * 111.32 * Math.cos(rad(HOME.lat)) * k, y = -(p.lat - HOME.lat) * 110.57 * k; return [x, y]; };
+  const xy = p => { const x = (p.lon - LOC.lon) * 111.32 * Math.cos(rad(LOC.lat)) * k, y = -(p.lat - LOC.lat) * 110.57 * k; return [x, y]; };
   let svg = `<svg viewBox="-112 -112 224 224"><defs><radialGradient id="sweep" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="scale(100)"><stop offset="0" stop-color="#4c8dff" stop-opacity=".0"/><stop offset="1" stop-color="#4c8dff" stop-opacity=".14"/></radialGradient></defs>`;
   svg += `<path class="sweep" d="M0 0 L0 -100 A100 100 0 0 1 70.7 -70.7 Z"/>`;
   for (const km of [50, 100, 150, 200]) svg += `<circle class="ring" r="${km * k}"/><text class="ringlbl" x="2" y="${-km * k + 7}">${km}</text>`;
   svg += `<text class="ringlbl" x="-3" y="-103" style="font-size:7px;fill:#8b93a4">Пн</text>`;
-  for (const [n, lat, lon] of TOWNS) { const [x, y] = xy({ lat, lon }); if (Math.hypot(x, y) > R - 4) continue; svg += `<g class="town"><circle cx="${x}" cy="${y}" r="1.6"/><text x="${x + 3}" y="${y + 2}">${n}</text></g>`; }
-  svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">Житомир</text></g>`;
+  for (const [n, lat, lon] of [['Житомир', ZHYTOMYR.lat, ZHYTOMYR.lon], ...TOWNS]) { const [x, y] = xy({ lat, lon }); const d = Math.hypot(x, y); if (d > R - 4 || d < 3) continue; svg += `<g class="town"><circle cx="${x}" cy="${y}" r="1.6"/><text x="${x + 3}" y="${y + 2}">${n}</text></g>`; }
+  const here = W().here.length > 16 ? W().here.slice(0, 15) + '…' : W().here;
+  svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">${esc(here)}</text></g>`;
   for (const a of list) {
     if (a.areaOnly) continue;
     let [x, y] = xy(a.p); const d = Math.hypot(x, y);
     if (d > R) { x *= R / d; y *= R / d; }
     const arrow = a.hdg !== null ? `<line x1="0" y1="0" x2="${Math.sin(rad(a.hdg)) * 11}" y2="${-Math.cos(rad(a.hdg)) * 11}" stroke="${a.color}" stroke-width="1.4" stroke-linecap="round"/>` : '';
-    svg += `<g class="tg" style="transform:translate(${x.toFixed(1)}px,${y.toFixed(1)}px)${a.advisory || a.stale ? ';opacity:.5' : ''}">${a.toCity?.direct ? '<circle class="pulse" r="4"/>' : ''}${arrow}<circle r="3.6" fill="${a.color}" stroke="#101218" stroke-width="1"/>${a.count ? `<text class="cnt" x="-1.7" y="2">${a.count}</text>` : ''}</g>`;
+    svg += `<g class="tg" style="transform:translate(${x.toFixed(1)}px,${y.toFixed(1)}px)${a.advisory || a.stale ? ';opacity:.5' : ''}">${a.toMe?.direct ? '<circle class="pulse" r="4"/>' : ''}${arrow}<circle r="3.6" fill="${a.color}" stroke="#101218" stroke-width="1"/>${a.count ? `<text class="cnt" x="-1.7" y="2">${a.count}</text>` : ''}</g>`;
   }
   $('radar').innerHTML = svg + '</svg>';
 }
@@ -577,15 +639,15 @@ function renderFeed() {
   }).join('');
 }
 
-function cityIntervals(now) {
+function myIntervals(now) {
   const all = [];
-  for (const k of CITY_AREAS) {
+  for (const k of myAreas()) {
     const a = S.tg.districts[k]; if (!a || !a.log) continue;
     let start = null;
     for (const [t, s] of a.log) { const ts = Date.parse(t); if (s === 'on' && start === null) start = ts; if (s === 'off' && start !== null) { all.push([start, ts]); start = null; } }
     if (start !== null) all.push([start, now]);
   }
-  const st = cityStatus();
+  const st = myStatus();
   if (st && st.state === 'on' && st.since) all.push([Date.parse(st.since), now]);
   all.sort((a, b) => a[0] - b[0]);
   const merged = [];
@@ -594,11 +656,11 @@ function cityIntervals(now) {
   return merged.filter(([, e]) => e > from).map(([s, e]) => [Math.max(s, from), Math.min(e, now)]);
 }
 function renderAlerts() {
-  const now = Date.now(), from = now - 24 * 3600e3, ivs = cityIntervals(now);
+  const now = Date.now(), from = now - 24 * 3600e3, ivs = myIntervals(now);
   const pct = t => ((t - from) / (now - from) * 100).toFixed(2);
   let bar = '';
   for (let h = 6; h < 24; h += 6) bar += `<u style="left:${pct(from + h * 3600e3)}%"></u>`;
-  const yellow = levelCls(cityStatus()).trim();
+  const yellow = levelCls(myStatus()).trim();
   bar += ivs.map(([s, e], i) => `<i class="${i === ivs.length - 1 && e >= now - 60e3 ? yellow : ''}" style="left:${pct(s)}%;width:${Math.max(.6, pct(e) - pct(s))}%"></i>`).join('');
   $('bar').innerHTML = bar;
   $('ticks').innerHTML = [0, 6, 12, 18, 24].map(h => `<span>${h === 24 ? 'зараз' : hm(from + h * 3600e3)}</span>`).join('');
@@ -606,8 +668,9 @@ function renderAlerts() {
   const longest = ivs.reduce((m, [a, b]) => Math.max(m, b - a), 0);
   const n = ivs.length, word = n % 10 === 1 && n % 100 !== 11 ? 'тривога' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'тривоги' : 'тривог';
   $('stats').innerHTML = n ? `<b>${n} ${word}</b> · разом <b>${dur(total)}</b> · найдовша <b>${dur(longest)}</b>` : '<b>Тривог не було</b>';
-  const firstLog = CITY_AREAS.flatMap(k => S.tg.districts[k]?.log || []).map(([t]) => Date.parse(t)).sort((a, b) => a - b)[0];
-  $('histNote').textContent = firstLog && firstLog > from ? 'дані з ' + hm(firstLog) : '';
+  const firstLog = myAreas().flatMap(k => S.tg.districts[k]?.log || []).map(([t]) => Date.parse(t)).sort((a, b) => a - b)[0];
+  $('histTitle').textContent = W().here + ' за добу';
+  $('histNote').textContent = !myAreas().length ? 'історія є лише для Житомирщини' : firstLog && firstLog > from ? 'дані з ' + hm(firstLog) : '';
 
   const ds = districtStates();
   $('dlist').innerHTML = DISTRICTS.map(n => {
@@ -643,7 +706,7 @@ function siren(cycles = 4) {
 function alarmNotify(st) {
   siren();
   if (store.get('notify') === '1' && 'Notification' in window && Notification.permission === 'granted') {
-    try { new Notification('Повітряна тривога — Житомир', { body: st.threat || 'Пройдіть в укриття', tag: 'alert' }); } catch {}
+    try { new Notification('Повітряна тривога — ' + W().here, { body: st.threat || 'Пройдіть в укриття', tag: 'alert' }); } catch {}
   }
   if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]);
 }
@@ -688,9 +751,94 @@ peek.addEventListener('pointercancel', () => { sy = null; snap(open); });
 new ResizeObserver(() => { setPeek(); if (!open && sy === null) place(closedY(), false); }).observe(peek);
 addEventListener('resize', () => { setPeek(); place(open ? 0 : closedY(), false); });
 
+/* ---------- my place: choosing it ---------- */
+const NOMINATIM = 'https://nominatim.openstreetmap.org';
+let geoAt = 0;
+// OpenStreetMap's public geocoder: at most one request a second and no search-as-you-type (its usage policy).
+async function osm(path) {
+  const wait = geoAt + 1100 - Date.now();
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  geoAt = Date.now();
+  return getJson(NOMINATIM + path + '&format=jsonv2&addressdetails=1&accept-language=uk');
+}
+function fromOsm(r) {
+  const a = r.address || {};
+  const place = a.city || a.town || a.village || a.hamlet || '';
+  const street = [a.road, a.house_number].filter(Boolean).join(' ');
+  const name = (r.name && r.name !== place ? r.name : '') || street || place || String(r.display_name || '').split(',')[0];
+  const raion = [a.district, a.county, a.state_district].find(v => v && /район$/i.test(v) && v !== a.city_district) || '';
+  // Villages of the Zhytomyr city community (Вереси, Слобода-Селець…) share the city's alerts.
+  const city = /^житомир$/i.test(place) || /житомирськ\S*\s+міськ/i.test(a.municipality || '');
+  return { lat: +r.lat, lon: +r.lon, name, short: name.length > 22 ? name.slice(0, 21) + '…' : name, place, raion, oblast: a.state || '', city, custom: true, label: r.display_name || name };
+}
+// No raion from the geocoder: take the one of the nearest known town, marked as approximate.
+function withRaion(loc) {
+  if (loc.raion) return loc;
+  const near = QUICK.map(([n, lat, lon, raion]) => ({ n, raion, d: distKm(loc, { lat, lon }) })).sort((a, b) => a.d - b.d)[0];
+  if (!near || near.d > 45) return loc;
+  return { ...loc, raion: near.raion, raionGuess: true, oblast: loc.oblast || 'Житомирська область', place: loc.place || (near.d < 5 ? near.n : ''), city: loc.city || (near.n === 'Житомир' && near.d < 8) };
+}
+function setLoc(loc) {
+  LOC = loc.custom ? withRaion(loc) : ZHYTOMYR;
+  store.set('loc', LOC.custom ? JSON.stringify(LOC) : '');
+  S.lastOn = null; // another place is not a new alert
+  $('locRes').innerHTML = '';
+  renderLoc(); render();
+}
+function renderLoc() {
+  $('locName').textContent = LOC.custom ? LOC.name : 'Житомир, центр міста';
+  const info = [LOC.custom && LOC.label && LOC.label !== LOC.name ? LOC.label.split(',').slice(0, 3).join(',') : '', LOC.raion ? LOC.raion + (LOC.raionGuess ? ' (приблизно)' : '') : 'район не визначено'];
+  $('locInfo').textContent = info.filter(Boolean).join(' · ');
+  $('whereName').textContent = LOC.custom ? LOC.name : 'Житомир, центр';
+  $('locQuick').innerHTML = QUICK.map(([n]) => `<button type="button" data-q="${esc(n)}" class="${(LOC.custom ? LOC.quick === n : n === 'Житомир') ? 'on' : ''}">${esc(n)}</button>`).join('');
+}
+const locMsg = t => { $('locRes').innerHTML = `<div class="msg">${esc(t)}</div>`; };
+$('locQuick').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const [n, lat, lon, raion] = QUICK.find(x => x[0] === b.dataset.q);
+  setLoc(n === 'Житомир' ? ZHYTOMYR : { name: n, short: n, place: n, lat, lon, raion, oblast: 'Житомирська область', city: false, custom: true, quick: n });
+});
+async function atPoint(lat, lon, name) {
+  let loc = { name, short: name, lat, lon, custom: true };
+  try { const f = fromOsm(await osm(`/reverse?lat=${lat}&lon=${lon}&zoom=16`)); loc = { ...f, lat, lon, name, short: name, label: f.label }; } catch {}
+  setLoc(loc);
+}
+$('locGps').onclick = () => {
+  if (!navigator.geolocation) { locMsg('Цей браузер не визначає місце. Введіть його вручну.'); return; }
+  locMsg('Визначаємо місце…');
+  navigator.geolocation.getCurrentPosition(
+    pos => atPoint(pos.coords.latitude, pos.coords.longitude, 'Моє місце'),
+    err => locMsg(err.code === 1 ? 'Доступ до геопозиції заборонено. Дозвольте його для Safari в «Параметри → Приватність → Служби геолокації» або введіть місце вручну.' : 'Не вдалося визначити місце. Спробуйте ще раз або введіть вручну.'),
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
+};
+$('locForm').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('locQ').value.trim();
+  if (!text) return;
+  // Coordinates: "50.25, 28.66", "50.25 28.66" or "50,25 28,66".
+  if (/^[\d\s.,;+-]+$/.test(text)) {
+    let nums = text.match(/-?\d+(?:\.\d+)?/g) || [];
+    if (nums.length !== 2) nums = text.replace(/(\d),(\d)/g, '$1.$2').match(/-?\d+(?:\.\d+)?/g) || [];
+    const [lat, lon] = nums.map(Number);
+    if (nums.length !== 2 || !(lat > 44 && lat < 53 && lon > 22 && lon < 41)) { locMsg('Координати мають бути в Україні, наприклад 50.25, 28.66'); return; }
+    locMsg('Шукаємо адресу…');
+    atPoint(lat, lon, `${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+    return;
+  }
+  locMsg('Шукаємо…');
+  try {
+    const found = (await osm(`/search?q=${encodeURIComponent(text)}&countrycodes=ua&limit=5`)).map(fromOsm);
+    if (!found.length) { locMsg('Нічого не знайдено. Спробуйте інакше: «Бердичів» або «Житомир, Київська 10».'); return; }
+    $('locRes').innerHTML = found.map((r, i) => `<button type="button" class="res" data-i="${i}"><b>${esc(r.name)}</b><small>${esc(r.label)}</small></button>`).join('');
+    $('locRes').onclick = ev => { const b = ev.target.closest('.res'); if (b) setLoc(found[+b.dataset.i]); };
+  } catch { locMsg('Пошук зараз недоступний. Спробуйте пізніше, скористайтеся GPS або списком міст.'); }
+};
+$('whereBtn').onclick = () => $('gear').click();
+
 /* ---------- settings ---------- */
 if (!('Notification' in window)) $('notifyRow').style.display = 'none';
 $('gear').onclick = () => {
+  renderLoc();
   $('optSound').checked = store.get('sound') === '1';
   $('optNotify').checked = store.get('notify') === '1' && 'Notification' in window && Notification.permission === 'granted';
   $('feed').value = store.get('feed') || '';
@@ -708,6 +856,7 @@ $('dlg').onclick = e => { if (e.target.id === 'dlg') closeDlg(); };
 
 /* ---------- start ---------- */
 setMap(store.get('map') || 'dimap');
+renderLoc();
 setTab(['targets', 'feed', 'alerts'].includes(S.tab) ? S.tab : 'targets');
 setPeek(); place(closedY(), false);
 loadSource('gh'); loadSource('worker'); neptunRest(); neptunConnect();
