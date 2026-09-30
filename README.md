@@ -25,3 +25,14 @@
 3. Запускайте с иконки: приложение откроется на весь экран.
 
 Файлы: `index.html` (всё приложение), `manifest.webmanifest`, `sw.js` (офлайн-кэш), `icons/`.
+
+## Дашборд тривоги (Житомир): `dashboard/`
+
+Одна сторінка для телефону: статус тривоги, курс цілей, влучання, робота ПВО та карти dimap.live / Neptun.
+Дані беруться з відкритих Telegram-каналів через Cloudflare Worker (`worker/`), без сторонніх API та токенів.
+
+1. Задеплойте Worker: [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/ssigmasigma17-sketch/Ssigma17/tree/camera-simulator/worker).
+2. Скопіюйте адресу `https://….workers.dev`.
+3. Відкрийте `…/dashboard/?feed=АДРЕСА` — вона збережеться в браузері.
+
+Список каналів і міст — у `worker/wrangler.toml` (`CHANNELS`, за потреби `PLACES`). Тест розбору: `node worker/test.mjs`.

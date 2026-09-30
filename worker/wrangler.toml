@@ -3,4 +3,5 @@ main = "index.js"
 compatibility_date = "2025-01-01"
 
 [vars]
-CHANNELS = "pzhytomyr,zhitomir_info,suspilnezhytomyr"
+# Public channels (open in a browser as t.me/s/<name>). "name?q=..." reads a channel's search results.
+CHANNELS = "Angry_Pol,blacklist_public,truexazhitomir,pzhytomyr,PpoUARadar,mon1tor_ua,eRadarrua,deraketaua,monitor_ukr,air_alert_ua?q=%23Житомирська_область"
