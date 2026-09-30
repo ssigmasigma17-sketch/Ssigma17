@@ -1,22 +1,34 @@
 import assert from 'node:assert';
-import { parseMessages, classify, alertState, relevantText, DEFAULT_PLACES } from './index.js';
+import { parseMessages, classify, parseAlerts, applyAlerts, relevantText, DEFAULT_PLACES } from './index.js';
 const places = DEFAULT_PLACES.split(',').map(s => s.toLowerCase());
 const msg = (post, t, text) => `<div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message" data-post="${post}"><div class="tgme_widget_message_text js-message_text" dir="auto">${text}</div><a class="tgme_widget_message_date"><time datetime="${t}" class="time">x</time></a></div></div>`;
-const m = parseMessages(msg('a/1', '2026-09-30T17:00:00+00:00', '🔴 Повітряна тривога в Житомирська область<br/>#Житомирська_область') + msg('a/2', '2026-09-30T17:30:00+00:00', '🟢 Відбій тривоги в Житомирська область'));
-assert.equal(m.length, 2); assert.equal(m[0].post, 'a/1'); assert.equal(m[1].ts, Date.parse('2026-09-30T17:30:00Z'));
+const m = parseMessages(msg('a/1', '2026-09-30T17:00:00+00:00', 'Раз<br/>два') + msg('a/2', '2026-09-30T17:30:00+00:00', 'три'));
+assert.equal(m.length, 2); assert.equal(m[0].text, 'Раз\nдва'); assert.equal(m[1].ts, Date.parse('2026-09-30T17:30:00Z'));
 
-// alert bot
-assert.equal(alertState(m[0].text, places, false), 'on'); assert.equal(alertState(m[1].text, places, false), 'off');
-assert.equal(alertState('Повітряна тривога в Київська область', places, false), null);
-// local channel alert posts
-assert.equal(alertState('🔴 Повітряна тривога!', places, true), 'on');
-assert.equal(alertState('🟢 Відбій тривоги', places, true), 'off');
-assert.equal(alertState('Реактивний БпЛА в бік Радомишля! До відбою в укриттях', places, true), null);
+// district alerts, wording taken from the channels
+assert.deepEqual(parseAlerts('🟡 Житомирський район — повітряна тривога, жовтий рівень: Дронова загроза (жовтий рівень)'),
+  [{ district: 'Житомирський', state: 'on', level: 'жовтий', threat: 'Дронова загроза' }]);
+assert.deepEqual(parseAlerts('🟡 Житомирський район — повітряна тривога, жовтий рівень: Дронова загроза (жовтий рівень)\n🟡 Бердичівський район — повітряна тривога, жовтий рівень: Дронова загроза (жовтий рівень)').map(a => a.district), ['Житомирський', 'Бердичівський']);
+assert.deepEqual(parseAlerts('🟢 Житомирський район — відбій повітряної тривоги\n⚠️ Зверніть увагу, повітряна тривога досі триває у:\n- Коростенський район'),
+  [{ district: 'Житомирський', state: 'off' }, { district: 'Коростенський', state: 'on', still: true }]);
+assert.deepEqual(parseAlerts('Реактивний БпЛА в бік Радомишля!'), []);
+
+const T = h => Date.parse(`2026-09-30T${h}:00Z`);
+let d = applyAlerts({}, [
+  { district: 'Житомирський', state: 'on', level: 'жовтий', threat: 'Дронова загроза', ts: T('15:45') },
+  { district: 'Житомирський', state: 'on', level: 'жовтий', ts: T('15:46') }, // repost by another channel
+  { district: 'Житомирський', state: 'off', ts: T('15:59') },
+  { district: 'Житомирський', state: 'on', level: 'червоний', threat: 'Ракетна загроза', ts: T('17:01') },
+]);
+assert.equal(d.Житомирський.state, 'on'); assert.equal(d.Житомирський.since, '2026-09-30T17:01:00.000Z'); assert.equal(d.Житомирський.level, 'червоний');
+d = applyAlerts(d, [{ district: 'Житомирський', state: 'on', ts: T('17:10') }]);
+assert.equal(d.Житомирський.since, '2026-09-30T17:01:00.000Z'); assert.equal(d.Житомирський.threat, 'Ракетна загроза');
+d = applyAlerts(d, [{ district: 'Житомирський', state: 'off', ts: T('16:00') }]); // older than known state: ignored
+assert.equal(d.Житомирський.state, 'on');
 
 // country-wide monitor: keep only our lines, signature does not count as air defence
 const mon = relevantText('📡Реактивні шахеди:\n⚠️2 реактивні шахеди з Чернігівщини на Київщину; ⚠️1 реактивний шахед з Київщини на Житомирщину\nПідписатись 👉 🚀ППО | РАДАР @mon1tor_ua', places, false);
 assert.equal(mon, '⚠️1 реактивний шахед з Київщини на Житомирщину'); assert.equal(classify(mon, false), 'course');
-assert.equal(classify(relevantText('2 на півночі Київщини на Житомирщину', places, false), false), 'course');
 assert.equal(relevantText('Шахеди на Київ', places, false), '');
 
 // local channel

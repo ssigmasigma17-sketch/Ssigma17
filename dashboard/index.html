@@ -22,7 +22,7 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--txt);overscroll-behavior:none}
-body.on{--accent:var(--red)}body.off{--accent:var(--green)}
+body.on{--accent:var(--red)}body.on.yellow{--accent:var(--amber)}body.off{--accent:var(--green)}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 
 /* map */
@@ -32,6 +32,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #map .fallback a{color:var(--blue);font-weight:700;text-decoration:none}
 #alarm{position:fixed;left:0;right:0;top:0;height:calc(100dvh - var(--peek) + 26px);pointer-events:none;opacity:0;transition:opacity .4s;
   box-shadow:inset 0 0 0 2px rgba(255,59,59,.85),inset 0 0 90px 10px rgba(255,59,59,.35)}
+body.on.yellow #alarm{box-shadow:inset 0 0 0 2px rgba(255,176,32,.8),inset 0 0 90px 10px rgba(255,176,32,.28)}
 body.on #alarm{opacity:1;animation:breathe 2.2s ease-in-out infinite}
 @keyframes breathe{50%{opacity:.45}}
 
@@ -48,16 +49,22 @@ body.on #alarm{opacity:1;animation:breathe 2.2s ease-in-out infinite}
 .status{display:flex;align-items:center;gap:14px}
 .orb{position:relative;flex:none;width:48px;height:48px;border-radius:50%;background:color-mix(in srgb,var(--accent) 18%,transparent);display:grid;place-items:center}
 .orb i{width:16px;height:16px;border-radius:50%;background:var(--accent);box-shadow:0 0 18px var(--accent)}
-body.on .orb::before,body.on .orb::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--red);animation:ping 2s cubic-bezier(0,.6,.4,1) infinite}
+body.on .orb::before,body.on .orb::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--accent);animation:ping 2s cubic-bezier(0,.6,.4,1) infinite}
 body.on .orb::after{animation-delay:1s}
 @keyframes ping{from{transform:scale(.6);opacity:1}to{transform:scale(1.7);opacity:0}}
 .st{flex:1;min-width:0}
 .st h1{margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em;line-height:1.1}
-body.on .st h1{color:#ff6b6b}body.off .st h1{color:#5ee49b}
+body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1{color:#5ee49b}
 .st p{margin:3px 0 0;font-size:13.5px;color:var(--mut);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gear{flex:none;width:38px;height:38px;border-radius:50%;background:var(--card);display:grid;place-items:center;color:var(--mut)}
 .gear svg{width:19px;height:19px}
 
+.districts{display:flex;gap:6px;margin-top:12px;overflow-x:auto;scrollbar-width:none}
+.districts::-webkit-scrollbar{display:none}
+.dz{flex:none;display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:99px;background:var(--card);font-size:12.5px;font-weight:700;color:var(--mut)}
+.dz i{width:7px;height:7px;border-radius:50%;background:var(--gray)}
+.dz.on i{background:var(--red);box-shadow:0 0 8px var(--red)}.dz.on.yellow i{background:var(--amber);box-shadow:0 0 8px var(--amber)}.dz.off i{background:var(--green)}
+.dz.on{color:var(--txt)}
 .ticker{display:flex;align-items:center;gap:8px;margin-top:12px;padding:9px 12px;border-radius:14px;background:var(--card);font-size:13.5px;font-weight:600;min-height:38px}
 .ticker .k{flex:none}
 .ticker span.x{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -122,6 +129,7 @@ body.on .st h1{color:#ff6b6b}body.off .st h1{color:#5ee49b}
       <div class="st"><h1 id="title">Завантаження…</h1><p id="sub">Житомирська область</p></div>
       <button class="gear" id="gear" aria-label="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </div>
+    <div class="districts" id="districts"></div>
     <div class="ticker none" id="ticker">Зачекайте, читаємо канали…</div>
   </div>
   <nav class="seg" id="seg">
@@ -156,16 +164,24 @@ if(q){store.set('feed',q);history.replaceState(null,'',location.pathname)}
 const feedUrl=()=>store.get('feed')||'events.json?t='+Date.now();
 
 /* ---------- render ---------- */
+const DISTRICTS=['Житомирський','Бердичівський','Коростенський','Звягельський'];
+const SHORT={Житомирський:'Житомир',Бердичівський:'Бердичів',Коростенський:'Коростень',Звягельський:'Звягель'};
+let districts={};
+const lvl=a=>a&&a.state==='on'&&a.level==='жовтий'?' yellow':'';
 function renderStatus(err){
   const b=document.body;
   if(err){b.className='';$('title').textContent='Немає зв’язку';$('sub').textContent='Перевірте інтернет · статус невідомий';return}
-  if(!alert){b.className='';$('title').textContent='Статус невідомий';$('sub').textContent='У каналах поки немає повідомлень про тривогу';return}
-  const on=alert.state==='on';b.className=on?'on':'off';
-  $('title').textContent=on?'Повітряна тривога':'Відбій тривоги';
-  $('sub').textContent=(on?'Триває ':'Тиша ')+dur(alert.since)+' · з '+hm(alert.since);
-  document.title=(on?'🔴 Тривога':'🟢 Відбій')+' — Житомир';
-  if(lastOn!==null&&lastOn!==on&&navigator.vibrate)navigator.vibrate(on?[400,200,400,200,400]:[150]);
-  lastOn=on;
+  if(!alert){b.className='';$('title').textContent='Статус невідомий';$('sub').textContent='Чекаємо на перше повідомлення про тривогу або відбій';}
+  else{
+    const on=alert.state==='on';b.className=(on?'on':'off')+lvl(alert);
+    $('title').textContent=on?(alert.threat||'Повітряна тривога'):'Відбій тривоги';
+    $('sub').textContent=on?(alert.level?alert.level[0].toUpperCase()+alert.level.slice(1)+' рівень · ':'Триває ')+dur(alert.since)+' · Житомирський р-н':'Тиша '+dur(alert.since)+' · з '+hm(alert.since);
+    document.title=(on?'🔴 Тривога':'🟢 Відбій')+' — Житомир';
+    if(lastOn!==null&&lastOn!==on&&navigator.vibrate)navigator.vibrate(on?[400,200,400,200,400]:[150]);
+    lastOn=on;
+  }
+  const names=[...new Set([...DISTRICTS,...Object.keys(districts)])];
+  $('districts').innerHTML=names.map(n=>{const a=districts[n];return `<span class="dz ${a?a.state:''}${lvl(a)}"><i></i>${esc(SHORT[n]||n)}</span>`}).join('');
 }
 function renderFeed(){
   for(const k in data)$('n-'+k).textContent=data[k].length;
@@ -187,7 +203,7 @@ async function load(){
     const r=await fetch(feedUrl(),{cache:'no-store'});
     if(!r.ok)throw new Error(r.status);
     const d=await r.json(),ev=d.events||[];
-    alert=d.alert;loaded=true;
+    alert=d.alert;districts=d.districts||{};loaded=true;
     data={course:ev.filter(e=>e.type==='course'&&mins(e.time)<180).slice(0,30),hit:ev.filter(e=>e.type==='hit').slice(0,30),pvo:ev.filter(e=>e.type==='pvo').slice(0,30)};
     renderStatus();renderFeed();
   }catch{renderStatus(true)}
