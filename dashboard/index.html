@@ -40,6 +40,8 @@ input{width:100%;font:inherit;color:var(--txt);background:var(--bg);border:1px s
   <input id="region" value="Житомир">
   <label>Свій шлях до API (необов'язково, якщо браузер блокує запити)</label>
   <input id="base" placeholder="https://api.alerts.in.ua">
+  <label>Адреса Cloudflare Worker (стрічка майже в реальному часі)</label>
+  <input id="feed" placeholder="https://zhytomyr-events.xxx.workers.dev">
   <button id="save">Зберегти</button>
   <p class="note">Токен зберігається лише в цьому телефоні (localStorage) і не потрапляє в репозиторій.</p>
 </section>
@@ -98,7 +100,7 @@ function list(el,items,empty){
 }
 async function loadEvents(){
   try{
-    const r=await fetch('events.json?t='+Date.now(),{cache:'no-store'});
+    const feed=store.get('feed');const r=await fetch(feed?feed:'events.json?t='+Date.now(),{cache:'no-store'});
     const d=await r.json();
     const ev=d.events||[];
     list('hits',ev.filter(e=>e.type==='hit'),'За останню добу повідомлень немає.');
@@ -107,11 +109,11 @@ async function loadEvents(){
   }catch{list('hits',[],'Не вдалося завантажити.');list('pvo',[],'Не вдалося завантажити.')}
 }
 
-$('gear').onclick=()=>{$('settings').classList.toggle('show');const c=cfg();$('token').value=c.token;$('region').value=c.region;$('base').value=store.get('base')||''};
-$('save').onclick=()=>{store.set('token',$('token').value.trim());store.set('region',$('region').value.trim()||'Житомир');store.set('base',$('base').value.trim());$('settings').classList.remove('show');lastState=null;loadAlerts()};
+$('gear').onclick=()=>{$('settings').classList.toggle('show');const c=cfg();$('token').value=c.token;$('region').value=c.region;$('base').value=store.get('base')||'';$('feed').value=store.get('feed')||''};
+$('save').onclick=()=>{store.set('token',$('token').value.trim());store.set('region',$('region').value.trim()||'Житомир');store.set('base',$('base').value.trim());store.set('feed',$('feed').value.trim());$('settings').classList.remove('show');lastState=null;loadAlerts()};
 $('mapbtn').onclick=()=>{const m=$('map');if(!m.src)m.src='https://dimap.live/';const b=$('mapbox');const show=b.style.display==='none';b.style.display=show?'block':'none';$('mapbtn').textContent=show?'Сховати карту':'Показати карту тут'};
 loadAlerts();loadEvents();
-setInterval(loadAlerts,30000);setInterval(loadEvents,300000);
+setInterval(loadAlerts,30000);setInterval(loadEvents,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){loadAlerts();loadEvents()}});
 </script>
 </body>
