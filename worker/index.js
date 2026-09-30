@@ -1,18 +1,16 @@
 // Reads public Telegram channel pages (t.me/s/<channel>) and returns the Zhytomyr air-raid state plus
 // course / hit / air-defence reports. Used by scripts/collect.mjs (GitHub Actions) and as a Cloudflare Worker.
-// Optional settings: CHANNELS, ALERT_CHANNELS, PLACES, HOURS (comma-separated).
+// Optional settings: CHANNELS, LOCAL_CHANNELS, PLACES (comma-separated), DISTRICT, HOURS.
 
-export const DEFAULT_CHANNELS = 'air_alert_ua,air_alert_ua?q=%23Житомирська_область,Angry_Pol,blacklist_public,truexazhitomir,pzhytomyr,PpoUARadar,mon1tor_ua,eRadarrua,deraketaua,monitor_ukr';
-// Channels that write only about Zhytomyr: every message counts, and their alert / all-clear posts are used for the state.
+export const DEFAULT_CHANNELS = 'Angry_Pol,blacklist_public,truexazhitomir,pzhytomyr,PpoUARadar,mon1tor_ua,eRadarrua,deraketaua,monitor_ukr';
+// Channels that write only about Zhytomyr: every message counts, not only lines naming a place.
 export const DEFAULT_LOCAL = 'Angry_Pol,blacklist_public,truexazhitomir,pzhytomyr';
 export const DEFAULT_PLACES = 'Житомир,Бердич,Корост,Новоград-Волин,Звягел,Малин,Овруч,Радомишл,Баранівк,Андрушівк,Попільн,Чуднів,Черняхів,Брусилів,Ружин,Емільчин,Лугин,Полісс';
 
 const PVO = /працю\S*\s+ппо|ппо\s+працю|робот\S*\s+ппо|сил\S*\s+ппо|збит(?!к)|збили|знищен|мобільн\S*\s+(вогнев\S*\s+)?груп/i;
 const HIT = /приліт|прилет|влучан|вибух|удар(?!н)|уражен|пошкодж|руйнуван|пожеж|загинул|постражда/i;
 const COURSE = /шахед|шахєд|бпла|дрон|ракет|курс|напрям|крилат|балістик|герань|гербера|калібр|реактив/i;
-const OBLAST = /житомирськ\S*\s+област/i;
 const SIGNATURE = /надіслати новину|підписати|підписатись|підписуйтесь|@\w{4,}|t\.me\//i;
-const LOCAL_ALERT = /^[^а-яіїєґa-z]*(повітряна тривога|тривога|відбій)/i;
 
 const decode = s => s
   .replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
@@ -39,12 +37,42 @@ export function relevantText(text, places, local) {
   return lines.flatMap(l => l.split(/;\s*/)).filter(s => mentions(s, places)).join('\n');
 }
 
-// Alert message -> 'on' | 'off' | null. Alert-bot posts must name our area; local posts must start with the word.
-export function alertState(text, places, local) {
-  if (local ? !(text.length < 160 && LOCAL_ALERT.test(text)) : !mentions(text, places)) return null;
-  if (/відбій/i.test(text)) return 'off';
-  if (/тривог/i.test(text)) return 'on';
-  return null;
+// Official alert reposts, e.g. "🟡 Житомирський район — повітряна тривога, жовтий рівень: Дронова загроза (жовтий рівень)",
+// "🟢 Житомирський район — відбій повітряної тривоги ⚠️ ... повітряна тривога досі триває у: - Коростенський район".
+// Returns [{ district, state: 'on'|'off', level?, threat?, still? }].
+export function parseAlerts(text) {
+  const out = [];
+  const [main, rest = ''] = text.split(/досі\s+триває\s+у:?/i);
+  for (const seg of main.split(/(?=[🟢🟡🟠🔴⚪])/u)) {
+    const m = /^[🟢🟡🟠🔴⚪]\s*([А-ЯІЇЄҐ][^\s—–]*)\s+район\s*[—–-]\s*([\s\S]+)$/u.exec(seg.trim());
+    if (!m) continue;
+    const body = m[2];
+    if (/відбій/i.test(body)) { out.push({ district: m[1], state: 'off' }); continue; }
+    if (!/тривог/i.test(body)) continue;
+    out.push({ district: m[1], state: 'on', level: /(\S+)\s+рівень/i.exec(body)?.[1]?.toLowerCase(), threat: /:\s*([^(⚠\n]+)/.exec(body)?.[1]?.trim() });
+  }
+  for (const m of rest.matchAll(/([А-ЯІЇЄҐ][^\s—–-]*)\s+район/gu)) out.push({ district: m[1], state: 'on', still: true });
+  return out;
+}
+
+// Applies alert transitions (sorted by time) to per-district state { state, since, ts, level, threat, url }.
+export function applyAlerts(districts, transitions) {
+  const d = structuredClone(districts || {});
+  for (const t of [...transitions].sort((a, b) => a.ts - b.ts)) {
+    const cur = d[t.district];
+    if (cur && t.ts <= cur.ts) continue;
+    if (t.still && cur?.state === 'on') { cur.ts = t.ts; continue; }
+    const same = cur && cur.state === t.state;
+    d[t.district] = {
+      state: t.state,
+      since: same ? cur.since : new Date(t.ts).toISOString(),
+      ts: t.ts,
+      level: t.state === 'on' ? (t.level || (same ? cur.level : undefined)) : undefined,
+      threat: t.state === 'on' ? (t.threat || (same ? cur.threat : undefined)) : undefined,
+      url: t.url,
+    };
+  }
+  return d;
 }
 
 // Relevant text -> 'pvo' | 'hit' | 'course' | null. Monitoring channels only post about targets, so they default to 'course'.
@@ -56,17 +84,17 @@ export function classify(text, local) {
   return null;
 }
 
-export async function collect(env = {}) {
+export async function collect(env = {}, prevDistricts = {}) {
   const list = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
   const sources = list(env.CHANNELS || DEFAULT_CHANNELS).map(s => s.replace(/^@|^https?:\/\/t\.me\/(s\/)?/, ''));
-  const alertChannels = list(env.ALERT_CHANNELS || 'air_alert_ua').map(s => s.toLowerCase());
   const localChannels = list(env.LOCAL_CHANNELS || DEFAULT_LOCAL).map(s => s.toLowerCase());
   const places = list(env.PLACES || DEFAULT_PLACES).map(s => s.toLowerCase());
+  const main = env.DISTRICT || 'Житомирський';
   const since = Date.now() - (+env.HOURS || 24) * 3600e3;
-  const events = [], alerts = [], errors = [];
+  const events = [], transitions = [], errors = [];
   await Promise.all(sources.map(async src => {
-    const channel = src.split('?')[0], id = channel.toLowerCase();
-    const local = localChannels.includes(id);
+    const channel = src.split('?')[0];
+    const local = localChannels.includes(channel.toLowerCase());
     try {
       const res = await fetch(`https://t.me/s/${src}`, { headers: { 'user-agent': 'Mozilla/5.0 (zhytomyr-dashboard)' } });
       if (!res.ok) { errors.push(`${src}: HTTP ${res.status}`); return; }
@@ -74,10 +102,9 @@ export async function collect(env = {}) {
       if (!messages.length) errors.push(`${src}: no messages on page`);
       for (const m of messages) {
         const url = `https://t.me/${m.post}`;
-        if (alertChannels.includes(id) || local) {
-          const state = alertState(m.text, places, local && !alertChannels.includes(id));
-          if (state) { alerts.push({ ts: m.ts, state, oblast: OBLAST.test(m.text), channel, url, text: m.text.slice(0, 200) }); continue; }
-          if (!local) continue;
+        if (local) {
+          const alerts = parseAlerts(m.text);
+          if (alerts.length) { for (const a of alerts) transitions.push({ ...a, ts: m.ts, url }); continue; }
         }
         if (m.ts < since) continue;
         const text = relevantText(m.text, places, local);
@@ -86,13 +113,13 @@ export async function collect(env = {}) {
       }
     } catch (e) { errors.push(`${src}: ${e.message}`); }
   }));
-  // Whole-oblast messages decide the state when there are any; otherwise the newest district / local post does.
-  const pool = alerts.some(a => a.oblast) ? alerts.filter(a => a.oblast) : alerts;
-  const last = pool.sort((a, b) => b.ts - a.ts)[0];
+  const districts = applyAlerts(prevDistricts, transitions);
   const seen = new Set();
   return {
     updated: new Date().toISOString(),
-    alert: last ? { state: last.state, since: new Date(last.ts).toISOString(), channel: last.channel, url: last.url, text: last.text } : null,
+    district: main,
+    alert: districts[main] || null,
+    districts,
     events: events.sort((a, b) => b.time.localeCompare(a.time)).filter(e => {
       const k = e.text.replace(/\s+/g, ' ').toLowerCase();
       return !seen.has(k) && seen.add(k);
