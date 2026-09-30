@@ -36,3 +36,6 @@
 3. Відкрийте `…/dashboard/?feed=АДРЕСА` — вона збережеться в браузері.
 
 Список каналів і міст — у `worker/wrangler.toml` (`CHANNELS`, за потреби `PLACES`). Тест розбору: `node worker/test.mjs`.
+
+Оновлення: дані з каналів тепер збирає GitHub Actions (`.github/workflows/feed.yml`, `scripts/collect.mjs`) приблизно щохвилини
+у `dashboard/events.json` на гілці `gh-pages`, тож Cloudflare Worker не обов'язковий.

@@ -1,7 +1,4 @@
 name = "zhytomyr-events"
 main = "index.js"
 compatibility_date = "2025-01-01"
-
-[vars]
-# Public channels (open in a browser as t.me/s/<name>). "name?q=..." reads a channel's search results.
-CHANNELS = "Angry_Pol,blacklist_public,truexazhitomir,pzhytomyr,PpoUARadar,mon1tor_ua,eRadarrua,deraketaua,monitor_ukr,air_alert_ua?q=%23Житомирська_область"
+# Channels, cities and window default to the values in index.js; override them here under [vars] if needed.
