@@ -1,5 +1,5 @@
-// Dev tool: saves recent posts of every channel (several pages) plus a few external sources to corpus/,
-// so the parser can be checked against real wording. Run via the "Corpus" workflow (manual).
+// Dev tool: saves recent posts of every channel (several pages) to corpus/, so the parser can be checked
+// against real wording. Run via the "Corpus" workflow (manual).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { parseMessages, DEFAULT_CHANNELS } from '../worker/index.js';
 
@@ -27,21 +27,3 @@ for (const src of DEFAULT_CHANNELS.split(',')) {
   console.log(name, channels[name].length);
 }
 writeFileSync('corpus/messages.json', JSON.stringify(channels, null, 1));
-
-const extra = {};
-for (const [key, url] of Object.entries({
-  ubilling: 'https://ubilling.net.ua/aerialalerts/',
-  neptun_dev: 'https://neptun.in.ua/developers',
-  dimap_headers: 'https://dimap.live/',
-})) {
-  try {
-    const res = await fetch(url, { headers: UA });
-    const body = await res.text();
-    extra[key] = {
-      status: res.status,
-      headers: Object.fromEntries([...res.headers].filter(([k]) => /frame|security-policy|access-control|content-type|cache/i.test(k))),
-      body: key === 'dimap_headers' ? undefined : body.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 20000),
-    };
-  } catch (e) { extra[key] = { error: e.message }; }
-}
-writeFileSync('corpus/extra.json', JSON.stringify(extra, null, 1));

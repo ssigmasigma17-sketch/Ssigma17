@@ -28,14 +28,21 @@
 
 ## Дашборд тривоги (Житомир): `dashboard/`
 
-Одна сторінка для телефону: статус тривоги, курс цілей, влучання, робота ПВО та карти dimap.live / Neptun.
-Дані беруться з відкритих Telegram-каналів через Cloudflare Worker (`worker/`), без сторонніх API та токенів.
+Одна сторінка для телефону: карта dimap.live (або NEPTUN) на весь екран, знизу шторка зі статусом.
 
-1. Задеплойте Worker: [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/ssigmasigma17-sketch/Ssigma17/tree/camera-simulator/worker).
-2. Скопіюйте адресу `https://….workers.dev`.
-3. Відкрийте `…/dashboard/?feed=АДРЕСА` — вона збережеться в браузері.
+- **Статус** — офіційні тривоги по районах з API [NEPTUN](https://neptun.in.ua/developers) (у браузері, без ключів);
+  рівень і тип загрози — з репостів офіційних сповіщень у місцевих каналах. Без NEPTUN статус береться з каналів.
+- **Цілі** — живі цілі NEPTUN у радіусі 250 км: відстань і напрямок від Житомира, курс на місто й час підльоту, радар.
+- **Стрічка** — пости Telegram-каналів про Житомирщину: курс, увага, вибухи, ППО, «чисто»; однакові з кількох каналів об'єднано.
+- **Тривоги** — графік тривог у Житомирі за добу, стан районів, стан джерел.
+- Налаштування: звук на початок тривоги, сповіщення браузера (Android/ПК), вибір карти.
 
-Список каналів і міст — у `worker/wrangler.toml` (`CHANNELS`, за потреби `PLACES`). Тест розбору: `node worker/test.mjs`.
+Дані з каналів збирають:
+- `worker/` — Cloudflare Worker, читає канали на кожен запит (живе джерело, ~15 с);
+- `.github/workflows/feed.yml` + `scripts/collect.mjs` — щохвилини в GitHub Actions, зберігає стан районів та історію
+  в `dashboard/events.json` на гілці `gh-pages` (публікує не частіше ніж раз на 6 хв через ліміт збірок GitHub Pages).
 
-Оновлення: дані з каналів тепер збирає GitHub Actions (`.github/workflows/feed.yml`, `scripts/collect.mjs`) приблизно щохвилини
-у `dashboard/events.json` на гілці `gh-pages`, тож Cloudflare Worker не обов'язковий.
+Розбір каналів — `worker/index.js`, перевірка на реальних постах — `node worker/test.mjs`.
+Свіжу вибірку постів для налаштування розбору дає ручний workflow «Corpus» (гілка `corpus`).
+Код Worker також лежить у репозиторії `zhytomyr-events`, з якого його розгортає Cloudflare; після змін у `worker/`
+його треба оновити і там.
