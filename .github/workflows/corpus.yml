@@ -1,0 +1,21 @@
+# Manual dev tool: dumps recent channel posts to the "corpus" branch for checking the parser on real wording.
+name: Corpus
+on: workflow_dispatch
+permissions: { contents: write }
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node scripts/corpus.mjs
+      - name: Push to the corpus branch
+        run: |
+          git config user.name "feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan corpus
+          git rm -rq --cached .
+          git add -f corpus
+          git commit -qm "Corpus $(date -u +%FT%TZ)"
+          git push -f origin corpus
