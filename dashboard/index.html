@@ -3,105 +3,167 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Житомир">
 <title>Житомир — тривога</title>
 <style>
-:root{--bg:#0f1115;--card:#1a1d24;--txt:#eef0f4;--mut:#8d94a3;--ok:#1f9d55;--bad:#d62839;--line:#2a2e38}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,system-ui,sans-serif;padding:env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom))}
-header{display:flex;justify-content:space-between;align-items:center;padding:14px 0}
-h1{font-size:18px;margin:0}
-button{font:inherit;color:var(--txt);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
-#status{border-radius:20px;padding:28px 20px;text-align:center;background:#3a3f4b;transition:background .3s}
-#status.ok{background:var(--ok)}#status.bad{background:var(--bad);animation:pulse 1.6s infinite}
-#status b{display:block;font-size:34px;letter-spacing:1px}
-#status small{display:block;margin-top:6px;opacity:.9}
-@keyframes pulse{50%{filter:brightness(1.25)}}
-h2{font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:24px 0 8px}
-.card{background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:8px}
-.meta{color:var(--mut);font-size:13px;margin-bottom:4px;display:flex;gap:8px;flex-wrap:wrap}
-.tag{border-radius:6px;padding:0 7px;font-size:12px;font-weight:600;color:#fff}
-.tag.hit{background:var(--bad)}.tag.pvo{background:#2f6fd6}.tag.course{background:#c77700}
-.card p{margin:0;white-space:pre-line;word-break:break-word;font-size:15px}
-a{color:#6ea8ff}
-.empty,.note{color:var(--mut);font-size:14px}
-#settings{display:none}#settings.show{display:block}
-input{width:100%;font:inherit;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0 10px}
-.tabs{display:flex;gap:8px;margin-bottom:8px}.tabs button{flex:1}.tabs button.on{background:#2f6fd6;border-color:#2f6fd6}
-iframe{width:100%;height:70vh;border:0;border-radius:10px;background:#000}
-.wide{display:block;width:100%;text-align:center;font-weight:600}
+:root{
+  --bg:#0b0d12;--surface:#14171f;--surface2:#1b1f29;--line:rgba(255,255,255,.07);
+  --txt:#f2f4f8;--mut:#8a92a3;
+  --ok:#22c55e;--bad:#ef4444;--warn:#f59e0b;--blue:#3b82f6;
+  --r:20px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
+body{margin:0;color:var(--txt);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  padding:calc(env(safe-area-inset-top) + 8px) 14px calc(28px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto;
+  background:radial-gradient(120% 60% at 50% -10%,var(--glow,rgba(59,130,246,.10)),transparent 60%),var(--bg)}
+body.bad{--glow:rgba(239,68,68,.28)}body.ok{--glow:rgba(34,197,94,.18)}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 4px 14px}
+.brand{display:flex;flex-direction:column}
+.brand b{font-size:22px;letter-spacing:-.02em}
+.brand span{font-size:13px;color:var(--mut)}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--txt);font-size:18px;display:grid;place-items:center}
+
+/* status */
+#status{position:relative;overflow:hidden;border-radius:var(--r);padding:20px 20px 18px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;gap:16px}
+#status .dot{flex:none;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:rgba(255,255,255,.08);position:relative}
+#status .dot::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid currentColor;opacity:0}
+#status h2{margin:0;font-size:30px;letter-spacing:-.02em;line-height:1.05}
+#status p{margin:4px 0 0;color:rgba(255,255,255,.75);font-size:14px}
+#status.bad{background:linear-gradient(135deg,#7f1d1d,#b91c1c 55%,#ef4444);border-color:rgba(239,68,68,.6);box-shadow:0 10px 40px -10px rgba(239,68,68,.6)}
+#status.bad .dot{background:rgba(255,255,255,.18);color:#fff}
+#status.bad .dot::after{animation:ring 1.8s ease-out infinite}
+#status.ok{background:linear-gradient(135deg,#14532d,#15803d 60%,#22c55e);border-color:rgba(34,197,94,.5);box-shadow:0 10px 40px -14px rgba(34,197,94,.5)}
+#status.ok .dot{background:rgba(255,255,255,.18)}
+@keyframes ring{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.9);opacity:0}}
+.err{margin:8px 4px 0;font-size:13px;color:#fca5a5;min-height:0}
+.err:empty{display:none}
+
+/* map */
+.map{position:relative;margin-top:14px;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:#0e1117;
+  height:clamp(440px,calc(100dvh - 190px),820px)}
+.map iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent}
+.map .hint{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut);font-size:14px;z-index:0}
+.map iframe{z-index:1}
+.map .badge{position:absolute;left:12px;bottom:12px;z-index:2;font-size:11px;padding:4px 9px;border-radius:99px;background:rgba(11,13,18,.7);backdrop-filter:blur(8px);color:var(--mut);border:1px solid var(--line);pointer-events:none}
+
+/* feed */
+.tabs{display:flex;gap:6px;margin:22px 0 10px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:14px;position:sticky;top:calc(env(safe-area-inset-top) + 4px);z-index:5;backdrop-filter:blur(12px)}
+.tabs button{flex:1;border:0;background:none;color:var(--mut);font:inherit;font-size:14px;font-weight:600;padding:9px 4px;border-radius:10px;transition:.15s}
+.tabs button.on{background:var(--surface2);color:var(--txt);box-shadow:0 1px 0 rgba(255,255,255,.06) inset}
+.tabs i{font-style:normal;font-size:11px;margin-left:5px;padding:1px 6px;border-radius:99px;background:rgba(255,255,255,.08)}
+.tabs button.on i{background:var(--blue);color:#fff}
+
+.item{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px 12px 18px;margin-bottom:8px;overflow:hidden}
+.item::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,var(--blue))}
+.item.hit{--c:var(--bad)}.item.pvo{--c:var(--blue)}.item.course{--c:var(--warn)}
+.item .meta{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--mut);margin-bottom:4px}
+.item .meta b{color:var(--txt);font-weight:600}
+.item .meta a{margin-left:auto;color:var(--mut);text-decoration:none}
+.item p{margin:0;font-size:15px;white-space:pre-line;word-break:break-word}
+.empty{padding:28px 10px;text-align:center;color:var(--mut);font-size:14px}
+.skel{height:64px;border-radius:16px;margin-bottom:8px;background:linear-gradient(90deg,var(--surface),var(--surface2),var(--surface));background-size:200% 100%;animation:sh 1.4s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+
+footer{margin-top:22px;font-size:12px;color:var(--mut);text-align:center;padding:0 10px}
+footer a{color:var(--mut)}
+
+/* settings sheet */
+#sheet{position:fixed;inset:0;z-index:20;display:none;background:rgba(0,0,0,.55);align-items:flex-end}
+#sheet.show{display:flex}
+#sheet .box{width:100%;max-width:720px;margin:0 auto;background:var(--surface);border-radius:24px 24px 0 0;padding:20px 18px calc(24px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+#sheet h3{margin:0 0 12px;font-size:18px}
+#sheet label{font-size:13px;color:var(--mut)}
+#sheet input{width:100%;font:inherit;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0 12px}
+#sheet .row{display:flex;gap:8px}
+#sheet .row button{flex:1;padding:12px;border-radius:12px;border:0;font:inherit;font-weight:600}
+.primary{background:var(--blue);color:#fff}.ghost{background:var(--surface2);color:var(--txt)}
+#sheet small{display:block;margin-top:10px;color:var(--mut);font-size:12px}
 </style>
 </head>
 <body>
-<header><h1>Житомир · тривога</h1><button id="gear" aria-label="Налаштування">⚙︎</button></header>
+<header>
+  <div class="brand"><b>Житомир</b><span id="clock">повітряна обстановка</span></div>
+  <button class="icon-btn" id="gear" aria-label="Налаштування">⚙︎</button>
+</header>
 
-<section id="settings" class="card">
-  <label>Адреса Cloudflare Worker</label>
-  <input id="feed" placeholder="https://zhytomyr-events.xxx.workers.dev">
-  <button id="save">Зберегти</button>
-  <p class="note">Зберігається лише в цьому телефоні. Родичам можна дати посилання з «?feed=адреса» — воно збережеться саме.</p>
+<div id="status"><div class="dot">⏳</div><div><h2>Завантаження</h2><p>З’єднуємось з каналами…</p></div></div>
+<div class="err" id="err"></div>
+
+<section class="map">
+  <div class="hint">Завантаження карти…</div>
+  <iframe src="https://dimap.live/" title="Карта dimap.live" allow="geolocation" referrerpolicy="no-referrer"></iframe>
+  <span class="badge">dimap.live · оновлюється сама</span>
 </section>
 
-<div id="status"><b>…</b><small>Завантаження</small></div>
-<p class="note" id="err"></p>
+<nav class="tabs" id="tabs">
+  <button data-t="course" class="on">Куди летить<i id="n-course">0</i></button>
+  <button data-t="hit">Влучання<i id="n-hit">0</i></button>
+  <button data-t="pvo">ПВО<i id="n-pvo">0</i></button>
+</nav>
+<div id="list"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
 
-<h2>Куди летить</h2><div id="course"></div>
+<footer>Дані з відкритих Telegram-каналів, збираються автоматично та можуть бути неточними або запізнюватись. Це не офіційне оповіщення — орієнтуйтесь на сирени й офіційні джерела.
+<br><a href="https://dimap.live/" target="_blank" rel="noopener">Карта не видна?</a></footer>
 
-<h2>Карта цілей</h2>
-<div class="card">
-  <div class="tabs"><button id="t1" class="on">dimap.live</button><button id="t2">Neptun</button></div>
-  <iframe id="map" loading="lazy" referrerpolicy="no-referrer"></iframe>
-  <p class="note">Якщо карта порожня — сайт не дозволяє показ усередині інших сторінок.</p>
-  <a class="wide" id="open" href="https://dimap.live/" target="_blank" rel="noopener"><button class="wide">Відкрити окремо ↗</button></a>
-</div>
-
-<h2>Влучання та вибухи</h2><div id="hit"></div>
-<h2>Робота ПВО</h2><div id="pvo"></div>
-<p class="note" id="src">Дані збираються автоматично з відкритих Telegram-каналів і можуть бути неточними або запізнюватись. Це не офіційне оповіщення — орієнтуйтесь на сирени та офіційні джерела.</p>
+<div id="sheet"><div class="box">
+  <h3>Налаштування</h3>
+  <label>Адреса джерела (Cloudflare Worker)</label>
+  <input id="feed" placeholder="https://zhytomyr-events.xxx.workers.dev" autocapitalize="off" autocorrect="off">
+  <div class="row"><button class="ghost" id="cancel">Закрити</button><button class="primary" id="save">Зберегти</button></div>
+  <small>Зберігається лише в цьому телефоні. Родичам можна переслати посилання з «?feed=адреса» — воно збережеться саме.</small>
+</div></div>
 
 <script>
 const $=id=>document.getElementById(id);
 const store={get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmt=iso=>new Date(iso).toLocaleString('uk-UA',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-const LABEL={hit:'Влучання',pvo:'ПВО',course:'Курс'};
-let lastState=null;
+const hm=iso=>new Date(iso).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+function ago(iso){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));if(m<1)return 'щойно';if(m<60)return m+' хв тому';const h=Math.floor(m/60);if(h<24)return h+' год тому';return new Date(iso).toLocaleDateString('uk-UA',{day:'2-digit',month:'2-digit'})+' '+hm(iso)}
+function dur(iso){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return m<60?m+' хв':Math.floor(m/60)+' год '+(m%60)+' хв'}
+const EMPTY={course:'За останні 3 години повідомлень про курс немає',hit:'За добу повідомлень про влучання немає',pvo:'За добу повідомлень про роботу ПВО немає'};
+let lastState=null,data={course:[],hit:[],pvo:[]},tab='course';
 
 const q=new URLSearchParams(location.search).get('feed');
 if(q){store.set('feed',q);history.replaceState(null,'',location.pathname)}
 
-function setStatus(cls,title,sub){const s=$('status');s.className=cls;s.innerHTML=`<b>${title}</b><small>${sub}</small>`;document.title=(cls==='bad'?'🔴 ':cls==='ok'?'🟢 ':'')+'Житомир — тривога'}
-function list(el,items,empty){$(el).innerHTML=items.length?items.map(e=>`<div class="card"><div class="meta"><span class="tag ${e.type}">${LABEL[e.type]}</span><span>${fmt(e.time)}</span><a href="${esc(e.url)}" target="_blank" rel="noopener">@${esc(e.channel)}</a></div><p>${esc(e.text)}</p></div>`).join(''):`<p class="empty">${empty}</p>`}
+function setStatus(cls,icon,title,sub){document.body.className=cls;const s=$('status');s.className=cls;s.innerHTML=`<div class="dot">${icon}</div><div><h2>${title}</h2><p>${sub}</p></div>`;document.title=(cls==='bad'?'🔴 ':cls==='ok'?'🟢 ':'')+'Житомир — тривога'}
+function render(){
+  for(const k in data)$('n-'+k).textContent=data[k].length;
+  const items=data[tab];
+  $('list').innerHTML=items.length?items.map(e=>`<div class="item ${e.type}"><div class="meta"><b>${ago(e.time)}</b><span>${hm(e.time)}</span><a href="${esc(e.url)}" target="_blank" rel="noopener">@${esc(e.channel)} ↗</a></div><p>${esc(e.text)}</p></div>`).join(''):`<div class="empty">${EMPTY[tab]}</div>`;
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));render()});
 
 async function load(){
+  $('clock').textContent='оновлено '+new Date().toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const feed=store.get('feed');
-  if(!feed){setStatus('','Немає джерела','Відкрийте ⚙︎ і вставте адресу Worker');return}
+  if(!feed){setStatus('','⚙︎','Немає джерела','Відкрийте ⚙︎ і вставте адресу Worker');$('list').innerHTML='<div class="empty">Підключіть джерело, щоб бачити повідомлення</div>';return}
   try{
     const r=await fetch(feed,{cache:'no-store'});
-    if(!r.ok)throw new Error('Worker відповів '+r.status);
-    const d=await r.json();
-    $('err').textContent='';
+    if(!r.ok)throw new Error('Джерело відповіло '+r.status);
+    const d=await r.json();$('err').textContent='';
     const a=d.alert,ev=d.events||[];
-    const t=new Date().toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
-    if(!a)setStatus('','Невідомо','Повідомлень про тривогу в каналах не знайдено');
-    else if(a.state==='on')setStatus('bad','ТРИВОГА','з '+fmt(a.since)+' · перевірено '+t);
-    else setStatus('ok','ВІДБІЙ','останнє повідомлення '+fmt(a.since)+' · перевірено '+t);
+    if(!a)setStatus('','❔','Невідомо','У каналах немає повідомлень про тривогу');
+    else if(a.state==='on')setStatus('bad','🚨','ТРИВОГА','Триває '+dur(a.since)+' · з '+hm(a.since));
+    else setStatus('ok','✓','ВІДБІЙ','Тиша вже '+dur(a.since)+' · з '+hm(a.since));
     const on=a?a.state==='on':null;
     if(lastState!==null&&on!==null&&lastState!==on&&navigator.vibrate)navigator.vibrate(on?[300,150,300,150,300]:[200]);
     if(on!==null)lastState=on;
-    const fresh=ev.filter(e=>Date.now()-Date.parse(e.time)<3*3600e3);
-    list('course',fresh.filter(e=>e.type==='course').slice(0,15),'За останні 3 години повідомлень про курс немає.');
-    list('hit',ev.filter(e=>e.type==='hit').slice(0,20),'За добу повідомлень немає.');
-    list('pvo',ev.filter(e=>e.type==='pvo').slice(0,20),'За добу повідомлень немає.');
-  }catch(e){setStatus('','Немає зв’язку','Статус невідомий');$('err').textContent=e.message}
+    data={course:ev.filter(e=>e.type==='course'&&Date.now()-Date.parse(e.time)<3*3600e3).slice(0,20),hit:ev.filter(e=>e.type==='hit').slice(0,20),pvo:ev.filter(e=>e.type==='pvo').slice(0,20)};
+    render();
+  }catch(e){setStatus('','📡','Немає зв’язку','Статус невідомий');$('err').textContent=e.message}
 }
-
-const MAPS={t1:'https://dimap.live/',t2:'https://neptun.in.ua/'};
-function showMap(id){for(const k in MAPS)$(k).classList.toggle('on',k===id);$('map').src=MAPS[id];$('open').href=MAPS[id]}
-$('t1').onclick=()=>showMap('t1');$('t2').onclick=()=>showMap('t2');
-$('gear').onclick=()=>{$('settings').classList.toggle('show');$('feed').value=store.get('feed')||''};
-$('save').onclick=()=>{store.set('feed',$('feed').value.trim());$('settings').classList.remove('show');lastState=null;load()};
-showMap('t1');load();setInterval(load,20000);
+const sheet=$('sheet');
+$('gear').onclick=()=>{$('feed').value=store.get('feed')||'';sheet.classList.add('show')};
+$('cancel').onclick=()=>sheet.classList.remove('show');
+sheet.onclick=e=>{if(e.target===sheet)sheet.classList.remove('show')};
+$('save').onclick=()=>{store.set('feed',$('feed').value.trim());sheet.classList.remove('show');lastState=null;load()};
+load();setInterval(load,20000);setInterval(render,60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
 </script>
 </body>
