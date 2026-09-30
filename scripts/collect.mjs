@@ -11,5 +11,6 @@ try { prev = JSON.parse(readFileSync(file, 'utf8')); } catch {}
 if (prev.alert && (!d.alert || prev.alert.since > d.alert.since)) d.alert = prev.alert;
 const key = x => JSON.stringify([x.alert, x.events]);
 const changed = key(prev) !== key(d);
-if (changed) writeFileSync(file, JSON.stringify(d, null, 1) + '\n');
+d.samples = (await import('./probe.mjs')).default;
+if (changed || !prev.samples) writeFileSync(file, JSON.stringify(d, null, 1) + '\n');
 console.log(`alert=${d.alert?.state ?? 'none'} events=${d.events.length} ${changed ? 'written' : 'unchanged'}`);
