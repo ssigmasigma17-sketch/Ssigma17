@@ -1,5 +1,5 @@
 {
- "updated": "2026-09-30T17:55:06.868Z",
+ "updated": "2026-09-30T17:57:09.962Z",
  "district": "Житомирський",
  "alert": {
   "state": "off",
@@ -253,13 +253,6 @@
    "channel": "mon1tor_ua",
    "url": "https://t.me/mon1tor_ua/75981",
    "text": "⚠️БпЛА залітає у Житомир."
-  },
-  {
-   "type": "course",
-   "time": "2026-09-30T12:09:32.000Z",
-   "channel": "mon1tor_ua",
-   "url": "https://t.me/mon1tor_ua/75975",
-   "text": "⚠️1 реактивний шахед з Житомирщини на Вінниччину, Вінницький район"
   }
  ],
  "errors": []
