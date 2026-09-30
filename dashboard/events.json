@@ -1,5 +1,5 @@
 {
- "updated": "2026-09-30T17:49:00.841Z",
+ "updated": "2026-09-30T17:55:06.868Z",
  "district": "Житомирський",
  "alert": {
   "state": "off",
@@ -260,13 +260,6 @@
    "channel": "mon1tor_ua",
    "url": "https://t.me/mon1tor_ua/75975",
    "text": "⚠️1 реактивний шахед з Житомирщини на Вінниччину, Вінницький район"
-  },
-  {
-   "type": "course",
-   "time": "2026-09-30T04:16:40.000Z",
-   "channel": "mon1tor_ua",
-   "url": "https://t.me/mon1tor_ua/75974",
-   "text": "⚠️ 1 реактивний шахед на Житомир."
   }
  ],
  "errors": []
