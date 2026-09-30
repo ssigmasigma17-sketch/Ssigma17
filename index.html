@@ -107,7 +107,7 @@ svg { display: block; }
 
 /* shutter row */
 .shRow { position: absolute; left: 0; right: 0; top: var(--shY); transform: translateY(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 34px; z-index: 2; }
-.shutter { position: relative; width: 76px; height: 76px; border-radius: 50%; }
+.shutter { touch-action: none; position: relative; width: 76px; height: 76px; border-radius: 50%; }
 .shutter .ring { position: absolute; inset: 0; border-radius: 50%; border: 4px solid #fff; transition: border-color .3s, box-shadow .3s; }
 .app.video .shutter .ring { border-color: rgba(44,44,46,.82); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 0 0 1px rgba(255,255,255,.12); }
 .shutter .core { position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 -31px; border-radius: 31px; background: #fff;
@@ -122,6 +122,22 @@ svg { display: block; }
 .side.still span { width: 44px; height: 44px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.25); transition: transform .1s; }
 .side.still:active span { transform: scale(.88); }
 .app.recording .side { opacity: 1; pointer-events: auto; }
+/* hold the shutter in photo mode: records while held */
+.app.quick .side { opacity: 0; pointer-events: none; }
+.app.quick .shutter .core { width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 35px; background: var(--red); }
+.app.quick .shutter .ring { border-color: rgba(255,255,255,.35); }
+
+/* zoom dial shown while zooming by finger */
+.zdial { position: absolute; left: 0; right: 0; top: calc(var(--zP) - 58px); height: 40px; pointer-events: none; opacity: 0; transition: opacity .25s, top .38s; z-index: 2;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22%, #000 78%, transparent); mask-image: linear-gradient(to right, transparent, #000 22%, #000 78%, transparent); }
+.app.video .zdial { top: calc(var(--zV) - 58px); }
+.zdial.on { opacity: 1; }
+.zdial .ticks { position: absolute; left: 0; right: 0; bottom: 4px; height: 12px;
+  background: repeating-linear-gradient(to right, rgba(255,255,255,.75) 0 1px, transparent 1px 9px); }
+.zdial .needle { position: absolute; left: 50%; bottom: 2px; width: 2px; height: 18px; margin-left: -1px; border-radius: 1px; background: var(--yellow); }
+.zdial b { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: var(--yellow); text-shadow: 0 0 4px rgba(0,0,0,.4); font-variant-numeric: tabular-nums; }
+.screenFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; transition: opacity .12s; }
+.screenFlash.on { opacity: 1; }
 
 /* bottom row */
 .bottom { position: absolute; left: 0; right: 0; top: var(--rowY); transform: translateY(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 26px; transition: opacity .25s; z-index: 2; }
@@ -193,7 +209,7 @@ svg { display: block; }
 .viewer .vt button svg { width: 22px; height: 22px; }
 .viewer .vt span { font-size: 15px; font-weight: 600; text-align: center; }
 .viewer .vt span small { display: block; font-size: 11.5px; font-weight: 400; color: var(--muted); }
-.viewer .vm { position: relative; min-height: 0; overflow: hidden; touch-action: pan-y; }
+.viewer .vm { position: relative; min-height: 0; overflow: hidden; touch-action: none; }
 .viewer .vm video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .viewer .vm img { -webkit-touch-callout: default; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .viewer .vm .play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(0,0,0,.45); display: grid; place-items: center; }
@@ -252,7 +268,9 @@ svg { display: block; }
   </div>
   <div class="recTimer" id="recTimer">00:00:00</div>
 
+  <div class="zdial" id="zdial"><b id="zdialVal"></b><div class="ticks" id="zticks"></div><span class="needle"></span></div>
   <div class="zoom" id="zoom"></div>
+  <div class="screenFlash" id="screenFlash"></div>
 
   <div class="shRow">
     <button type="button" class="side pause" id="pauseBtn" aria-label="Pause">
@@ -552,7 +570,7 @@ $('zoom').addEventListener('pointermove', e => {
   if (zDrag.on) {
     const z = clamp(zDrag.z0 * 2 ** (dx / 90), .5, 10);
     if ((z < 1) !== (R.zoom < 1)) lensSwitch();
-    R.zoom = z; applyZoom();
+    R.zoom = z; applyZoom(); showDial();
   }
 });
 const zEnd = () => { if (zDrag && zDrag.on) media.style.transition = ''; zDrag = null; };
@@ -565,6 +583,13 @@ $('zoom').addEventListener('click', e => {
   if ((z < 1) !== (R.zoom < 1)) lensSwitch();
   R.zoom = z; applyZoom();
 });
+let zdialT = 0;
+function showDial() {
+  const d = $('zdial');
+  $('zdialVal').textContent = numFmt.format(Math.round(R.zoom * 10) / 10) + '×';
+  $('zticks').style.backgroundPosition = `${(-Math.log2(R.zoom) * 90).toFixed(1)}px 0`;
+  d.classList.add('on'); clearTimeout(zdialT); zdialT = setTimeout(() => d.classList.remove('on'), 900);
+}
 function lensSwitch() { media.classList.add('switching'); setTimeout(() => media.classList.remove('switching'), 180); }
 
 // ---------- modes ----------
@@ -691,6 +716,13 @@ async function takePhoto() {
     for (let n = S.timer; n > 0; n--) { cd.textContent = n; beep(880, .08); await new Promise(r => setTimeout(r, 1000)); }
     cd.hidden = true; R.busy = false;
   }
+  if (R.flash && R.cam === 'front') {
+    const f = $('screenFlash'); f.classList.add('on');
+    await new Promise(r => setTimeout(r, 260));
+    click(); await addShot('photo');
+    setTimeout(() => f.classList.remove('on'), 120);
+    return;
+  }
   click(); blink(); addShot('photo');
 }
 
@@ -758,7 +790,22 @@ $('pauseBtn').addEventListener('click', () => {
   setPauseIcon();
 });
 $('stillBtn').addEventListener('click', () => { if (R.recording) { click([0], .35); blink(); addShot('photo'); } });
-$('shutter').addEventListener('click', () => {
+let quickT = 0, quickOn = false, quickSkipClick = false;
+const shutterEl = $('shutter');
+shutterEl.addEventListener('pointerdown', () => {
+  if (R.mode !== 'photo' || R.recording || R.busy) return;
+  clearTimeout(quickT);
+  quickT = setTimeout(() => { quickOn = true; app.classList.add('quick'); startRec(); }, 450);
+});
+const quickEnd = () => {
+  clearTimeout(quickT);
+  if (!quickOn) return;
+  quickOn = false; quickSkipClick = true; setTimeout(() => { quickSkipClick = false; }, 400);
+  stopRec(); app.classList.remove('quick');
+};
+shutterEl.addEventListener('pointerup', quickEnd); shutterEl.addEventListener('pointercancel', quickEnd); shutterEl.addEventListener('pointerleave', quickEnd);
+shutterEl.addEventListener('click', () => {
+  if (quickSkipClick) { quickSkipClick = false; return; }
   if (R.mode === 'photo') takePhoto();
   else if (R.recording) stopRec();
   else startRec();
@@ -829,7 +876,7 @@ vf.addEventListener('pointermove', e => {
     const [a, b] = [...ptrs.values()];
     const z = clamp(g.z0 * Math.hypot(a.x - b.x, a.y - b.y) / g.d0, .5, 10);
     if ((z < 1) !== (R.zoom < 1)) lensSwitch();
-    R.zoom = z; media.style.transition = 'none'; applyZoom();
+    R.zoom = z; media.style.transition = 'none'; applyZoom(); showDial();
     return;
   }
   const dx = e.clientX - g.x, dy = e.clientY - g.y;
@@ -1069,8 +1116,14 @@ $('vShare').addEventListener('click', async () => {
 $('vStrip').addEventListener('click', e => { const b = e.target.closest('button'); if (b) openViewer(+b.dataset.i); });
 (() => {
   let x0 = null;
-  $('vMain').addEventListener('pointerdown', e => { x0 = e.clientX; });
-  $('vMain').addEventListener('pointerup', e => { if (x0 === null) return; const d = e.clientX - x0; x0 = null; if (Math.abs(d) > 40) openViewer(vIdx + (d < 0 ? 1 : -1)); });
+  let y0 = 0;
+  $('vMain').addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; });
+  $('vMain').addEventListener('pointerup', e => {
+    if (x0 === null) return;
+    const d = e.clientX - x0, dy = e.clientY - y0; x0 = null;
+    if (dy > 90 && dy > Math.abs(d)) { $('vBack').click(); return; }
+    if (Math.abs(d) > 40) openViewer(vIdx + (d < 0 ? 1 : -1));
+  });
 })();
 
 // ---------- keep the screen on while the camera is open ----------
