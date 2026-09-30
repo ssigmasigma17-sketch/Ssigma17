@@ -48,6 +48,13 @@ input{width:100%;font:inherit;color:var(--txt);background:var(--bg);border:1px s
 <div id="err"></div>
 <div id="alerts"></div>
 
+<h2>Карта шахедів (dimap.live)</h2>
+<div class="card">
+  <a href="https://dimap.live/" target="_blank" rel="noopener"><button style="width:100%;font-weight:600">Відкрити карту dimap.live ↗</button></a>
+  <button id="mapbtn" style="width:100%;margin-top:8px">Показати карту тут</button>
+  <div id="mapbox" style="display:none;margin-top:8px"><iframe id="map" style="width:100%;height:70vh;border:0;border-radius:10px;background:#000" referrerpolicy="no-referrer" loading="lazy"></iframe>
+  <p class="note">Якщо карта порожня — сайт забороняє показ усередині інших сторінок, відкрийте кнопкою вище.</p></div>
+</div>
 <h2>Влучання та вибухи</h2><div id="hits"></div>
 <h2>Робота ПВО</h2><div id="pvo"></div>
 <p class="note" id="src"></p>
@@ -102,6 +109,7 @@ async function loadEvents(){
 
 $('gear').onclick=()=>{$('settings').classList.toggle('show');const c=cfg();$('token').value=c.token;$('region').value=c.region;$('base').value=store.get('base')||''};
 $('save').onclick=()=>{store.set('token',$('token').value.trim());store.set('region',$('region').value.trim()||'Житомир');store.set('base',$('base').value.trim());$('settings').classList.remove('show');lastState=null;loadAlerts()};
+$('mapbtn').onclick=()=>{const m=$('map');if(!m.src)m.src='https://dimap.live/';const b=$('mapbox');const show=b.style.display==='none';b.style.display=show?'block':'none';$('mapbtn').textContent=show?'Сховати карту':'Показати карту тут'};
 loadAlerts();loadEvents();
 setInterval(loadAlerts,30000);setInterval(loadEvents,300000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){loadAlerts();loadEvents()}});
