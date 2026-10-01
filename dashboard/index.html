@@ -57,6 +57,10 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .st p{margin:3px 0 0;font-size:13.5px;color:var(--mut);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gear{flex:none;width:38px;height:38px;border-radius:50%;background:var(--card);display:grid;place-items:center;color:var(--mut);position:relative}
 .gear svg{width:19px;height:19px}
+.wrow{display:flex;gap:8px;margin-bottom:10px}.wrow .where{margin:0;flex:1;min-width:0}
+.share{flex:none;width:44px;border-radius:14px;background:var(--card);display:grid;place-items:center;color:var(--blue)}.share svg{width:19px;height:19px}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));z-index:40;transform:translate(-50%,20px);opacity:0;pointer-events:none;padding:10px 16px;border-radius:99px;background:var(--txt);color:#111;font-size:14px;font-weight:800;transition:opacity .25s,transform .25s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
 .gear .live{position:absolute;right:1px;top:1px;width:9px;height:9px;border-radius:50%;background:var(--gray);box-shadow:0 0 0 2px var(--sheet)}
 .gear .live.ok{background:var(--green)}.gear .live.part{background:var(--amber)}.gear .live.bad{background:var(--red)}
 
@@ -267,7 +271,7 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
   </nav>
   <div id="panes">
     <div class="pane" id="pane-targets">
-      <button class="where" id="whereBtn"><svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>Відстані від: <b id="whereName">Житомир</b><span>змінити</span></button>
+      <div class="wrow"><button class="where" id="whereBtn"><svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>Відстані від: <b id="whereName">Житомир</b><span>змінити</span></button><button class="share" id="share" aria-label="Поділитися обстановкою"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button></div>
       <div class="card"><div class="rhead"><span id="rangeNote">Радіус 200 км</span><div class="mini" id="rangeSel"><button data-r="auto">Авто</button><button data-r="50">50</button><button data-r="100">100</button><button data-r="200">200</button></div></div><div class="radar" id="radar"></div><div class="legend" id="legend"></div><div id="rsel"></div></div>
       <div class="card" id="tlist"><div class="skel"></div></div>
       <p class="foot">Цілі й офіційні тривоги: <a href="https://neptun.in.ua/" target="_blank" rel="noopener">Карта повітряних тривог — NEPTUN</a>. Положення цілей приблизне й прогнозується за курсом між оновленнями. Це не офіційне оповіщення — орієнтуйтесь на сирени.</p>
@@ -300,6 +304,7 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
   </div>
   <label class="opt"><span>Звук, коли починається тривога<small>Працює, поки сторінка відкрита</small></span><input type="checkbox" class="sw" id="optSound"></label>
   <label class="opt"><span>Сигнал, коли ціль летить на ваше місце<small>Короткий звук і вібрація, поки сторінка відкрита</small></span><input type="checkbox" class="sw" id="optDirect"></label>
+  <label class="opt" id="wakeRow"><span>Не гасити екран під час тривоги<small>Поки сторінка відкрита; батарея сідає швидше</small></span><input type="checkbox" class="sw" id="optWake"></label>
   <label class="opt" id="notifyRow"><span>Сповіщення браузера<small>Android і комп’ютер; на iPhone недоступно</small></span><input type="checkbox" class="sw" id="optNotify"></label>
   <div class="opt"><span>Карта</span><div class="mini" id="mapSel"><button data-map="dimap">dimap</button><button data-map="neptun">NEPTUN</button></div></div>
   <details><summary>Джерело Telegram-каналів</summary><input type="url" id="feed" placeholder="zhytomyr-events.ponapon309.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false"></details>
@@ -587,6 +592,7 @@ function renderStatus() {
     if (S.lastOn !== null && S.lastOn !== on) { if (on) alarmNotify(st); else S.offSeen = new Date().toISOString(); }
     S.lastOn = on;
   }
+  keepAwake(st && st.state === 'on');
   const ds = districtStates();
   const mine = myDistrict();
   $('districts').innerHTML = DISTRICTS.map(n => { const a = ds[n]; return `<span class="dz ${a ? a.state : ''}${levelCls(a)}${n === mine ? ' me' : ''}" title="${esc(n)} район">${esc(SHORT[n])}</span>`; }).join('');
@@ -893,6 +899,33 @@ function directNotify(a, n) {
 }
 document.addEventListener('pointerdown', unlockAudio, { passive: true });
 
+/* ---------- screen stays on during an alert ---------- */
+// The browser drops the lock whenever the page is hidden, so it is asked for again on every render while needed.
+let wake = null;
+if (!('wakeLock' in navigator)) $('wakeRow').style.display = 'none';
+function keepAwake(on) {
+  const want = on && store.get('wake') === '1' && !document.hidden && 'wakeLock' in navigator;
+  if (want && !wake) { wake = 'pending'; navigator.wakeLock.request('screen').then(l => { wake = l; l.addEventListener('release', () => { wake = null; }); }).catch(() => { wake = null; }); }
+  else if (!want && wake && wake !== 'pending') { wake.release().catch(() => {}); wake = null; }
+}
+
+/* ---------- share: the situation as text for the family chat ---------- */
+function shareText() {
+  const st = myStatus(), lines = [];
+  if (st) lines.push(st.state === 'on' ? `🔴 ${st.threat || 'Повітряна тривога'} — ${W().here}${st.since ? ', триває ' + dur(Date.now() - Date.parse(st.since)) : ''}` : `🟢 Відбій тривоги — ${W().here}`);
+  const targets = nearbyTargets().filter(a => !a.advisory && !a.areaOnly).slice(0, 3);
+  for (const a of targets) lines.push(`${a.label}${a.count ? ' ×' + a.count : ''}: ${Math.round(a.dist)} км ${COMPASS_TO[sector(a.from)]}${a.toMe?.direct ? `, курс ${W().to}` + (a.toMe.eta ? ` (~${Math.max(1, Math.round(a.toMe.eta))} хв)` : '') : ''}`);
+  if (!targets.length && st && st.state === 'on') lines.push('Поруч цілей не видно');
+  lines.push('Станом на ' + hm(Date.now()) + ' · ' + location.origin + location.pathname);
+  return lines.join('\n');
+}
+function toast(t) { let el = $('toast'); if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); } el.textContent = t; el.classList.add('show'); clearTimeout(el.__t); el.__t = setTimeout(() => el.classList.remove('show'), 2200); }
+$('share').onclick = async () => {
+  const text = shareText();
+  if (navigator.share) { try { await navigator.share({ text }); } catch {} return; }
+  try { await navigator.clipboard.writeText(text); toast('Скопійовано — вставте в чат'); } catch { toast('Не вдалося скопіювати'); }
+};
+
 /* ---------- tabs & feed interactions ---------- */
 function setTab(t) {
   if (S.tab === 'feed' && t !== 'feed') markSeen();
@@ -1023,11 +1056,13 @@ $('gear').onclick = () => {
   renderLoc();
   $('optSound').checked = store.get('sound') === '1';
   $('optDirect').checked = store.get('direct') === '1';
+  $('optWake').checked = store.get('wake') === '1';
   $('optNotify').checked = store.get('notify') === '1' && 'Notification' in window && Notification.permission === 'granted';
   $('feed').value = store.get('feed') || '';
   $('dlg').classList.add('show');
 };
 $('optSound').onchange = e => { store.set('sound', e.target.checked ? '1' : ''); if (e.target.checked) { unlockAudio(); siren(1); } };
+$('optWake').onchange = e => { store.set('wake', e.target.checked ? '1' : ''); invalidate(); };
 $('optDirect').onchange = e => { store.set('direct', e.target.checked ? '1' : ''); if (e.target.checked) { unlockAudio(); beep(); } };
 $('optNotify').onchange = async e => {
   if (!e.target.checked) { store.set('notify', ''); return; }
@@ -1049,7 +1084,7 @@ setInterval(() => { if (!document.hidden) loadSource('gh'); }, 60000);
 setInterval(neptunRest, 20000);
 setInterval(() => { if (dirty) render(); }, 1000);
 setInterval(() => { if (S.tab === 'targets' && open) renderRadar(nearbyTargets()); }, 2000);
-setInterval(invalidate, 30000);
+setInterval(invalidate, 10000); // timers and minutes-to-arrival stay current
 document.addEventListener('visibilitychange', () => { if (document.hidden) { if (N.ws) N.ws.close(); } else { loadSource('gh'); loadSource('worker'); neptunRest(); neptunConnect(); } });
 </script>
 </body>
