@@ -71,7 +71,9 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .brief time,.brief .src{flex:none;color:var(--dim);font-size:12px;text-decoration:none}
 .brief.none{color:var(--dim)}
 .brief.danger{background:color-mix(in srgb,var(--red) 18%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--red) 45%,transparent)}
-.brief .ico{flex:none;font-size:18px}
+.brief .ico{flex:none;width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent)}
+.brief .ico .ti{width:22px;height:22px}
+.ti{display:block;fill:currentColor}
 .brief .two{flex:1;min-width:0}
 .brief .two b,.brief .two small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brief .two small{font-size:12px;color:var(--mut);font-weight:600;margin-top:1px}
@@ -98,25 +100,35 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .foot{margin:14px 4px 0;font-size:11.5px;line-height:1.5;color:var(--dim);text-align:center}
 .foot a{color:var(--mut);font-weight:700}
 .empty{text-align:center;padding:26px 14px;color:var(--dim);font-size:14px;font-weight:600}
-.empty div{font-size:28px;margin-bottom:6px;opacity:.7}
+.empty svg{display:block;width:30px;height:30px;margin:0 auto 8px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
 /* radar */
 .radar{position:relative;width:100%;max-width:380px;margin:0 auto;aspect-ratio:1}
 .radar svg{width:100%;height:100%;display:block;overflow:visible}
+.radar text{paint-order:stroke;stroke:var(--card);stroke-width:2px;stroke-linejoin:round}
 .radar .ring{fill:none;stroke:rgba(255,255,255,.08)}
+.radar .axis{stroke:rgba(255,255,255,.04);stroke-width:.6}
 .radar .ringlbl{fill:var(--dim);font-size:6px;font-weight:700}
-.radar .town circle{fill:#3a4150}.radar .town text{fill:#6c7486;font-size:6.2px;font-weight:700}
+.radar .side{fill:var(--mut);font-size:7px;font-weight:800}
+.radar .town circle{fill:#465062}.radar .town text{fill:#7a8294;font-size:6.4px;font-weight:700}
 .radar .home circle{fill:var(--txt)}.radar .home text{fill:var(--txt);font-size:7px;font-weight:800}
 .radar .sweep path{fill:#4c8dff}
 .radar .sweep line{stroke:#4c8dff;stroke-opacity:.6;stroke-width:.8}
 .radar .tg{transition:transform 1.8s linear,opacity .4s}
 .radar .tg .pulse{fill:none;stroke:var(--red);stroke-width:1}
-.radar .cnt{font-size:6px;font-weight:800;fill:#111}
+.radar .sil{stroke:var(--card);stroke-width:2.2px;stroke-linejoin:round;paint-order:stroke}
+.radar .cnt{font-size:7px;font-weight:800;stroke-width:2.4px}
+.legend{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;margin-top:4px;font-size:12.5px;font-weight:700;color:var(--mut)}
+.legend:empty{display:none}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend .ti{width:17px;height:17px;color:var(--c)}
+.legend b{color:var(--txt);font-weight:800}
 
 /* targets list */
 .tgt{display:flex;gap:12px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
 .tgt:first-child{border-top:0}
-.tgt .ic{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:18px;background:color-mix(in srgb,var(--c) 16%,transparent)}
+.tgt .ic{flex:none;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent)}
+.tgt .ic .ti{width:26px;height:26px}
 .tgt .bd{flex:1;min-width:0}
 .tgt .t1{font-weight:800;font-size:15px;display:flex;gap:6px;align-items:baseline}
 .tgt .t1 small{font-weight:700;color:var(--mut);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -196,13 +208,15 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .dz.me{box-shadow:inset 0 0 0 1.5px currentColor}
 .where{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px;padding:10px 12px;border-radius:14px;background:var(--card);font-size:13.5px;font-weight:700;color:var(--mut);text-align:left}
 .where b{color:var(--txt);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pin{flex:none;width:16px;height:16px;fill:none;stroke:var(--blue);stroke-width:2;stroke-linejoin:round}
 .where span{color:var(--blue);font-size:12.5px}
 .locsec{padding-bottom:12px;margin-bottom:4px;border-bottom:1px solid var(--line)}
 .loccur{display:flex;gap:12px;align-items:center;padding:12px;border-radius:14px;background:var(--card)}
-.loccur .pin{font-size:20px}
+.loccur .pin{width:22px;height:22px}
 .loccur b{display:block;font-size:15px;font-weight:800}
 .loccur small{display:block;font-size:12px;color:var(--mut);font-weight:600;margin-top:2px}
-.locgps{width:100%;margin-top:10px;padding:11px;border-radius:12px;background:var(--card2);font-weight:800;font-size:14px}
+.locgps{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:10px;padding:11px;border-radius:12px;background:var(--card2);font-weight:800;font-size:14px}
+.locgps svg{width:18px;height:18px;fill:none;stroke:var(--blue);stroke-width:2;stroke-linecap:round}
 .locform{display:flex;gap:8px;margin-top:10px}
 .locform input{flex:1;min-width:0;font:inherit;font-size:14.5px;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px;outline:none}
 .locform input:focus{border-color:var(--blue)}
@@ -243,8 +257,8 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
   </nav>
   <div id="panes">
     <div class="pane" id="pane-targets">
-      <button class="where" id="whereBtn">📍 Відстані від: <b id="whereName">Житомир</b><span>змінити</span></button>
-      <div class="card"><div class="radar" id="radar"></div></div>
+      <button class="where" id="whereBtn"><svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>Відстані від: <b id="whereName">Житомир</b><span>змінити</span></button>
+      <div class="card"><div class="radar" id="radar"></div><div class="legend" id="legend"></div></div>
       <div class="card" id="tlist"><div class="skel"></div></div>
       <p class="foot">Цілі й офіційні тривоги: <a href="https://neptun.in.ua/" target="_blank" rel="noopener">Карта повітряних тривог — NEPTUN</a>. Положення цілей приблизне й прогнозується за курсом між оновленнями. Це не офіційне оповіщення — орієнтуйтесь на сирени.</p>
     </div>
@@ -267,8 +281,8 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 <div id="dlg"><div class="box">
   <h3>Налаштування</h3>
   <div class="locsec" id="locSec">
-    <div class="loccur"><div class="pin">📍</div><div><b id="locName">Житомир</b><small id="locInfo">Житомирський район</small></div></div>
-    <button class="locgps" id="locGps" type="button">📡 Моє місце за GPS</button>
+    <div class="loccur"><svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg><div><b id="locName">Житомир</b><small id="locInfo">Житомирський район</small></div></div>
+    <button class="locgps" id="locGps" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Моє місце за GPS</button>
     <form class="locform" id="locForm"><input id="locQ" type="search" placeholder="Місто, село, вулиця або 50.25, 28.66" enterkeyhint="search" autocomplete="off" autocorrect="off"><button type="submit">Знайти</button></form>
     <div class="quick" id="locQuick"></div>
     <div id="locRes"></div>
@@ -298,10 +312,39 @@ const SHORT = { Житомирський: 'Житомир', Бердичівсь
 const TOWNS = [['Коростень', 50.9536, 28.6389], ['Бердичів', 49.8993, 28.6025], ['Звягель', 50.5941, 27.6166], ['Малин', 50.77, 29.24],
   ['Овруч', 51.3243, 28.8038], ['Радомишль', 50.4951, 29.233], ['Київ', 50.4501, 30.5234],
   ['Вінниця', 49.2331, 28.4682], ['Рівне', 50.6199, 26.2516]];
+// Target types: name, colour, the legend's forms for 1 / 2–4 / 5+.
 const TYPES = {
-  uav: ['Шахед', '🛩️', '#ffb020'], recon: ['Розвідник', '🛰️', '#9aa4b8'], missile: ['Ракета', '🚀', '#ff5a5a'],
-  ballistic: ['Балістика', '☄️', '#ff2d55'], kab: ['КАБ', '💣', '#c084fc'], mig31k: ['МіГ-31К', '✈️', '#ff7a45'], unknown: ['Ціль', '❔', '#8b93a4'],
+  uav: { name: 'Шахед', color: '#ffb020', forms: ['шахед', 'шахеди', 'шахедів'] },
+  missile: { name: 'Ракета', color: '#ff5a5a', forms: ['ракета', 'ракети', 'ракет'] },
+  ballistic: { name: 'Балістика', color: '#ff3d9a', forms: ['балістична', 'балістичні', 'балістичних'] },
+  kab: { name: 'КАБ', color: '#c084fc', forms: ['КАБ', 'КАБи', 'КАБів'] },
+  mig31k: { name: 'МіГ-31К', color: '#ff7a45', forms: ['МіГ-31К', 'МіГ-31К', 'МіГ-31К'] },
+  recon: { name: 'Розвідник', color: '#7dd3fc', forms: ['розвідник', 'розвідники', 'розвідників'] },
+  unknown: { name: 'Ціль', color: '#8b93a4', forms: ['невідома', 'невідомі', 'невідомих'] },
 };
+// Top-view silhouettes, nose up, in a 16×16 box around (0,0).
+const SHAPES = {
+  uav: 'M0 -7.5L1.3 -4.5L1.4 -2.2L7.5 4.2L7.5 6L1.6 4.9L1 6.8L-1 6.8L-1.6 4.9L-7.5 6L-7.5 4.2L-1.4 -2.2L-1.3 -4.5Z',
+  missile: 'M0 -8L1 -6.4L1 -0.8L3.8 2.4L3.8 3.3L1 2.3L1 5.2L2.4 7L2.4 7.8L0.6 7.2L-0.6 7.2L-2.4 7.8L-2.4 7L-1 5.2L-1 2.3L-3.8 3.3L-3.8 2.4L-1 -0.8L-1 -6.4Z',
+  ballistic: 'M0 -8C1.5 -6.6 2.1 -4.8 2.1 -2.6L2.1 4L3.9 6.6L3.9 7.8L-3.9 7.8L-3.9 6.6L-2.1 4L-2.1 -2.6C-2.1 -4.8 -1.5 -6.6 0 -8Z',
+  kab: 'M0 -7.2C1.8 -7.2 2.6 -5.2 2.6 -2.6L2.6 2.2L1.3 4.6L3.4 6.9L3.4 7.8L-3.4 7.8L-3.4 6.9L-1.3 4.6L-2.6 2.2L-2.6 -2.6C-2.6 -5.2 -1.8 -7.2 0 -7.2Z',
+  mig31k: 'M0 -8L1 -5.6L1.4 -2L6.8 2.4L6.8 3.6L1.5 2.8L1.6 5.4L3.8 7L3.8 8L0.9 7.4L-0.9 7.4L-3.8 8L-3.8 7L-1.6 5.4L-1.5 2.8L-6.8 3.6L-6.8 2.4L-1.4 -2L-1 -5.6Z',
+  recon: 'M0 -6.8L0.9 -5.6L0.9 -2.6L7.6 -1.9L7.6 -0.3L0.9 -0.3L0.7 4.2L3.1 5.2L3.1 6.5L0 6L-3.1 6.5L-3.1 5.2L-0.7 4.2L-0.9 -0.3L-7.6 -0.3L-7.6 -1.9L-0.9 -2.6L-0.9 -5.6Z',
+  unknown: 'M0 -6L6 0L0 6L-6 0Z',
+};
+// Turned along the course when it is known; the "unknown" diamond has no nose to turn.
+const turn = (type, hdg) => hdg != null && type !== 'unknown' ? `rotate(${Math.round(hdg)}) ` : '';
+const icon = (type, hdg) => `<svg class="ti" viewBox="-8.5 -8.5 17 17" aria-hidden="true"><path d="${SHAPES[type]}" transform="${turn(type, hdg)}"/></svg>`;
+const plural = (n, [one, few, many]) => n % 10 === 1 && n % 100 !== 11 ? one : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? few : many;
+// Line glyphs for empty states.
+const GLYPH = {
+  shield: '<path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6z"/>',
+  off: '<path d="M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8M4 4l16 16"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  course: '<path d="M12 3l7 18-7-4-7 4z"/>',
+  house: '<path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/>',
+};
+const glyph = g => `<svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[g]}</svg>`;
 const KIND = { course: 'Курс', warn: 'Увага', hit: 'Вибухи', pvo: 'ППО', calm: 'Чисто' };
 const RANGE_KM = 250, RADAR_KM = 200;
 
@@ -466,8 +509,8 @@ const levelCls = a => a && a.state === 'on' && a.level === 'жовтий' ? ' ye
 
 /* ---------- targets ---------- */
 function analyze(t, now) {
-  const [label, icon, color] = TYPES[t.type] || TYPES.unknown;
-  const base = { t, label: t.title || label, icon, color, count: t.count > 1 ? t.count : 0, advisory: !!t.advisory, stale: t.status === 'stale', inOblast: !!LOC.oblast && norm(t.region) === norm(LOC.oblast) };
+  const type = TYPES[t.type] ? t.type : 'unknown';
+  const base = { t, type, label: t.title || TYPES[type].name, color: TYPES[type].color, count: t.count > 1 ? t.count : 0, advisory: !!t.advisory, stale: t.status === 'stale', inOblast: !!LOC.oblast && norm(t.region) === norm(LOC.oblast) };
   if (t.areaOnly || !Number.isFinite(t.lat) || !Number.isFinite(t.lon)) return { ...base, areaOnly: true };
   const hdg = Number.isFinite(t.velocity?.bearingDeg) ? t.velocity.bearingDeg : (Number.isFinite(t.heading) ? t.heading : null);
   const speed = t.velocity?.speedKmh || 0;
@@ -522,7 +565,7 @@ function renderStatus() {
     b.className = (on ? 'on' : 'off') + levelCls(st);
     $('title').textContent = on ? (st.threat || 'Повітряна тривога') : 'Відбій тривоги';
     const lvl = on && st.level ? st.level[0].toUpperCase() + st.level.slice(1) + ' рівень · ' : '';
-    const at = LOC.custom ? '📍 ' + W().here + ' · ' : '';
+    const at = LOC.custom ? W().here + ' · ' : '';
     $('sub').textContent = at + (on ? lvl + (st.since ? 'триває ' + dur(Date.now() - Date.parse(st.since)) + ' · з ' + hm(st.since) : W().here) : st.since ? 'Тиша ' + dur(Date.now() - Date.parse(st.since)) + ' · з ' + hm(st.since) : 'тривоги немає');
     document.title = (on ? '🔴 Тривога' : '🟢 Відбій') + ' — ' + W().here;
     if (S.lastOn !== null && S.lastOn !== on) { if (on) alarmNotify(st); else S.offSeen = new Date().toISOString(); }
@@ -543,7 +586,7 @@ function renderBrief() {
     const where = [`${Math.round(top.dist)} км ${COMPASS_TO[sector(top.from)]}`, top.t.locality || top.t.district].filter(Boolean).join(' · ');
     const eta = top.toMe?.eta ? Math.max(1, Math.round(top.toMe.eta)) : null;
     const course = top.toMe ? (top.toMe.direct ? (eta ? `~${eta} хв ${W().until}` : `курс ${W().to}`) : `пройде за ~${Math.round(top.toMe.miss)} км` + (eta ? ` · ~${eta} хв` : '')) : targetLine(top);
-    el.innerHTML = `<span class="ico">${top.icon}</span><span class="two"><b>${esc(top.label)}${top.count ? ' ×' + top.count : ''} · ${course}</b><small>${esc(where)}${more > 0 ? ` · ще ${more} ${more === 1 ? 'ціль' : more < 5 ? 'цілі' : 'цілей'}` : ''}</small></span><a class="by" href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a>`;
+    el.innerHTML = `<span class="ico" style="--c:${top.color}">${icon(top.type, top.hdg)}</span><span class="two"><b>${esc(top.label)}${top.count ? ' ×' + top.count : ''} · ${course}</b><small>${esc(where)}${more > 0 ? ` · ще ${more} ${plural(more, ['ціль', 'цілі', 'цілей'])}` : ''}</small></span><a class="by" href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a>`;
     return;
   }
   const recent = S.tg.events.filter(e => e.type !== 'calm' && mins(e.time) < 15 && mineEvent(e))[0];
@@ -567,16 +610,17 @@ function renderTabsCount() {
 function renderTargets() {
   const list = nearbyTargets();
   renderRadar(list);
+  renderLegend(list);
   const el = $('tlist');
   if (!N.dataAt && N.mode !== 'off') { el.innerHTML = '<div class="skel"></div>'; return; }
   if (!list.length) {
     el.innerHTML = N.mode === 'off' && !N.dataAt
-      ? '<div class="empty"><div>📡</div>NEPTUN зараз недоступний. Дивіться «Стрічку» — там повідомлення каналів.</div>'
-      : `<div class="empty"><div>🛡️</div>У радіусі ${RANGE_KM} км цілей немає</div>`;
+      ? `<div class="empty">${glyph('off')}NEPTUN зараз недоступний. Дивіться «Стрічку» — там повідомлення каналів.</div>`
+      : `<div class="empty">${glyph('shield')}У радіусі ${RANGE_KM} км цілей немає</div>`;
     return;
   }
   el.innerHTML = list.map(a => `<div class="tgt${a.toMe?.direct ? ' danger' : ''}${a.advisory || a.stale ? ' calmish' : ''}" style="--c:${a.color}">
-    <div class="ic">${a.icon}</div>
+    <div class="ic">${icon(a.type, a.areaOnly ? null : a.hdg)}</div>
     <div class="bd"><div class="t1">${esc(a.label)}${a.count ? ' ×' + a.count : ''}<small>${esc(a.t.locality || a.t.district || a.t.region || '')}</small></div>
     <div class="t2">${targetLine(a)}${a.stale ? ' · давно не оновлювалась' : ''}</div></div>
     <div class="ds">${a.areaOnly ? '<span>область</span>' : `<b>${Math.round(a.dist)}</b><span>км ${COMPASS[sector(a.from)]}</span>`}</div></div>`).join('');
@@ -600,8 +644,9 @@ function renderRadar(list) {
     let svg = '<svg viewBox="-112 -112 224 224">';
     svg += `<g class="sweep"><path d="${wedge(-50, -28)}" fill-opacity=".04"/><path d="${wedge(-28, -12)}" fill-opacity=".08"/><path d="${wedge(-12, 0)}" fill-opacity=".15"/><line x1="0" y1="0" x2="0" y2="-100"/>`
       + '<animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="6s" repeatCount="indefinite"/></g>';
-    for (const km of [50, 100, 150, 200]) svg += `<circle class="ring" r="${km * k}"/><text class="ringlbl" x="2" y="${-km * k + 7}">${km}</text>`;
-    svg += '<text class="ringlbl" x="-3" y="-103" style="font-size:7px;fill:#8b93a4">Пн</text>';
+    svg += `<path class="axis" d="M0 -${R}V${R}M-${R} 0H${R}"/>`;
+    for (const km of [50, 100, 150, 200]) svg += `<circle class="ring" r="${km * k}"/><text class="ringlbl" x="2" y="${-km * k + 7}">${km === RADAR_KM ? km + ' км' : km}</text>`;
+    svg += '<text class="side" y="-104" text-anchor="middle">Пн</text><text class="side" x="104" y="2.4">Сх</text><text class="side" y="109" text-anchor="middle">Пд</text><text class="side" x="-104" y="2.4" text-anchor="end">Зх</text>';
     for (const [n, lat, lon] of [['Житомир', ZHYTOMYR.lat, ZHYTOMYR.lon], ...TOWNS]) { const [x, y] = xy({ lat, lon }); const d = Math.hypot(x, y); if (d > R - 4 || d < 3) continue; svg += `<g class="town"><circle cx="${x}" cy="${y}" r="1.6"/><text x="${x + 3}" y="${y + 2}">${n}</text></g>`; }
     svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">${esc(here)}</text></g><g class="tgts"></g></svg>`;
     $('radar').innerHTML = svg;
@@ -617,13 +662,21 @@ function renderRadar(list) {
     const pos = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
     if (!g) { g = document.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'tg'); g.style.transform = pos; layer.appendChild(g); radarTargets.set(id, g); }
     else g.style.transform = pos;
-    g.style.opacity = a.advisory || a.stale ? '.5' : '1';
-    const arrow = a.hdg !== null ? `<line x1="0" y1="0" x2="${(Math.sin(rad(a.hdg)) * 11).toFixed(1)}" y2="${(-Math.cos(rad(a.hdg)) * 11).toFixed(1)}" stroke="${a.color}" stroke-width="1.4" stroke-linecap="round"/>` : '';
-    const pulse = a.toMe?.direct ? '<circle class="pulse" r="4"><animate attributeName="r" from="4" to="14" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" from="1" to="0" dur="1.6s" repeatCount="indefinite"/></circle>' : '';
-    const inner = `${pulse}${arrow}<circle r="3.6" fill="${a.color}" stroke="#101218" stroke-width="1"/>${a.count ? `<text class="cnt" x="-1.7" y="2">${a.count}</text>` : ''}`;
+    // Beyond the last ring: pinned to the edge and dimmed.
+    g.style.opacity = a.advisory || a.stale ? '.45' : d > R ? '.6' : '1';
+    // Fading dots behind the silhouette show where it came from.
+    const trail = a.hdg !== null ? `<g transform="rotate(${Math.round(a.hdg)})" fill="${a.color}"><circle cy="9.5" r="1.2" opacity=".5"/><circle cy="13.5" r="1" opacity=".3"/><circle cy="17.5" r=".8" opacity=".15"/></g>` : '';
+    const pulse = a.toMe?.direct ? '<circle class="pulse" r="5"><animate attributeName="r" from="5" to="16" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" from="1" to="0" dur="1.6s" repeatCount="indefinite"/></circle>' : '';
+    const inner = `${pulse}${trail}<path class="sil" d="${SHAPES[a.type]}" transform="${turn(a.type, a.hdg)}scale(.8)" fill="${a.color}"/>${a.count ? `<text class="cnt" x="6.5" y="-4.5" fill="${a.color}">×${a.count}</text>` : ''}`;
     if (g.__inner !== inner) { g.innerHTML = inner; g.__inner = inner; }
   }
   for (const [id, g] of radarTargets) if (!seen.has(id)) { g.remove(); radarTargets.delete(id); }
+}
+// What the icons on the radar are, and how many of each (a group of three shaheds counts as three).
+function renderLegend(list) {
+  const n = {};
+  for (const a of list) n[a.type] = (n[a.type] || 0) + (a.count || 1);
+  $('legend').innerHTML = Object.keys(TYPES).filter(k => n[k]).map(k => `<span style="--c:${TYPES[k].color}">${icon(k)}<b>${n[k]}</b>${plural(n[k], TYPES[k].forms)}</span>`).join('');
 }
 
 // Similar posts from several channels within 8 minutes become one item.
@@ -650,7 +703,7 @@ function renderFeed() {
   const events = S.tg.events.filter(e => f === 'all' ? mins(e.time) < 24 * 60 : f === 'course' ? (e.type === 'course' || e.type === 'warn') && mins(e.time) < 180 : e.type === f);
   const el = $('list');
   if (!S.src.gh.at && !S.src.worker.at) return;
-  if (!events.length) { el.innerHTML = `<div class="empty"><div>${{ all: '🌙', course: '🛰️', hit: '🏠', pvo: '🛡️' }[f]}</div>${f === 'course' ? 'За останні 3 години повідомлень про курс немає' : 'За добу повідомлень немає'}</div>`; return; }
+  if (!events.length) { el.innerHTML = `<div class="empty">${glyph({ all: 'moon', course: 'course', hit: 'house', pvo: 'shield' }[f])}${f === 'course' ? 'За останні 3 години повідомлень про курс немає' : 'За добу повідомлень немає'}</div>`; return; }
   el.innerHTML = clusters(events).slice(0, 60).map(c => {
     const e = c.items[0], chans = [...new Map(c.items.map(i => [i.channel, i])).values()];
     const isNew = c.items.some(i => Date.parse(i.time) > S.seenBefore);
