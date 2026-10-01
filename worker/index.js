@@ -259,10 +259,9 @@ function parseInformal(text) {
 }
 
 const LEVEL_RANK = { жовтий: 1, помаранчевий: 2, червоний: 3 };
-const HISTORY_MS = 48 * 3600e3;
 // Applies alert transitions (sorted by time) to per-area state { state, since, ts, level, threat, url, log }.
-// log holds [time, 'on'|'off'] state changes for the last 48 hours.
-export function applyAlerts(areas, transitions, now = Date.now()) {
+// log holds [time, 'on'|'off'] state changes for the last historyMs (48 hours unless asked for more).
+export function applyAlerts(areas, transitions, now = Date.now(), historyMs = 48 * 3600e3) {
   const d = structuredClone(areas || {});
   for (const t of [...transitions].sort((a, b) => a.ts - b.ts)) {
     const cur = d[t.area];
@@ -281,7 +280,7 @@ export function applyAlerts(areas, transitions, now = Date.now()) {
       log,
     };
   }
-  for (const a of Object.values(d)) if (a.log) a.log = a.log.filter(([t], i, l) => now - Date.parse(t) < HISTORY_MS || i === l.length - 1);
+  for (const a of Object.values(d)) if (a.log) a.log = a.log.filter(([t], i, l) => now - Date.parse(t) < historyMs || i === l.length - 1);
   return d;
 }
 
@@ -374,7 +373,7 @@ export async function collect(env = {}, prevAreas = {}) {
       events.push(...r.events);
     } catch (e) { errors.push(`${channel}: ${e.message}`); }
   }));
-  const districts = applyAlerts(prevAreas, transitions);
+  const districts = applyAlerts(prevAreas, transitions, Date.now(), (+env.HISTORY_HOURS || 48) * 3600e3);
   const seen = new Set();
   return {
     updated: new Date().toISOString(),

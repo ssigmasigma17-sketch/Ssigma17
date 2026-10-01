@@ -8,7 +8,8 @@ const file = 'dashboard/events.json';
 const MIN_GAP = 6 * 60e3;
 let prev = {};
 try { prev = JSON.parse(readFileSync(file, 'utf8')); } catch {}
-const d = await collect({ ...process.env, PAGES_LOCAL: process.env.PAGES_LOCAL || 2 }, prev.districts);
+// 8 days of alert history: the dashboard's weekly statistics are built from it.
+const d = await collect({ ...process.env, PAGES_LOCAL: process.env.PAGES_LOCAL || 2, HISTORY_HOURS: process.env.HISTORY_HOURS || 192 }, prev.districts);
 for (const e of d.errors) console.error('warn:', e);
 const key = x => JSON.stringify([x.districts, x.events]);
 const changed = key(prev) !== key(d);
