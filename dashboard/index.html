@@ -185,6 +185,22 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .ticks{display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--dim);font-weight:700;font-variant-numeric:tabular-nums}
 .stats{margin-top:12px;font-size:14px;font-weight:600;color:var(--mut);line-height:1.5}
 .stats b{color:var(--txt);font-weight:800}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;height:96px}
+.day{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;min-width:0}
+.day i{width:70%;max-width:28px;min-height:2px;border-radius:4px 4px 1px 1px;background:var(--red)}
+.day.none i{height:0!important;min-height:0;border-top:1.5px dashed var(--dim);border-radius:0;background:none}
+.day span{font-size:11.5px;font-weight:700;color:var(--dim)}
+.day.today span{color:var(--txt)}
+.day.pick i{box-shadow:0 0 0 2px var(--sheet),0 0 0 3.5px var(--txt)}
+.cap{margin-top:10px;min-height:20px;font-size:13px;font-weight:600;color:var(--mut);line-height:1.45}
+.cap b{color:var(--txt);font-weight:800}
+.lbl{margin-top:16px;font-size:12px;font-weight:800;color:var(--mut);letter-spacing:.04em;text-transform:uppercase}
+.hours{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;margin-top:8px}
+.hours i{height:24px;border-radius:3px;background:var(--card2);position:relative}
+.hours i b{position:absolute;inset:0;border-radius:inherit;background:var(--red)}
+.hours i.pick{box-shadow:0 0 0 1.5px var(--txt)}
+.offline{display:none;margin-top:10px;padding:8px 12px;border-radius:12px;font-size:12.5px;font-weight:700;color:#ffc451;background:color-mix(in srgb,var(--amber) 13%,var(--card))}
+.offline.show{display:block}
 .drow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .drow:first-of-type{border-top:0}
 .drow .nm{flex:1;font-weight:700}
@@ -261,6 +277,7 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
       <div class="st"><h1 id="title">Завантаження…</h1><p id="sub">Житомир</p></div>
       <button class="gear" id="gear" aria-label="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><i class="live" id="live"></i></button>
     </div>
+    <div class="offline" id="offline"></div>
     <div class="districts" id="districts"></div>
     <div class="brief none" id="brief">Зачекайте, збираємо дані…</div>
   </div>
@@ -285,6 +302,10 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
     </div>
     <div class="pane" id="pane-alerts">
       <div class="card"><h3><span id="histTitle" style="margin:0;color:inherit;text-transform:inherit;letter-spacing:inherit">Житомир за добу</span> <span id="histNote"></span></h3><div class="bar" id="bar"></div><div class="ticks" id="ticks"></div><div class="stats" id="stats"></div></div>
+      <div class="card"><h3>За тиждень <span id="weekNote"></span></h3>
+        <div class="days" id="days"></div><div class="cap" id="dayCap"></div>
+        <div class="lbl">Коли найчастіше</div>
+        <div class="hours" id="hours"></div><div class="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div><div class="cap" id="hourCap"></div></div>
       <div class="card"><h3>Райони області</h3><div id="dlist"></div></div>
       <div class="card"><h3>Джерела</h3><div id="slist"></div></div>
       <p class="foot">Статус — офіційні тривоги за даними <a href="https://neptun.in.ua/" target="_blank" rel="noopener">NEPTUN</a>, рівень і тип загрози — з репостів офіційних сповіщень у місцевих каналах. Якщо NEPTUN недоступний, статус береться лише з каналів.</p>
@@ -417,7 +438,7 @@ async function getJson(url) { const r = await fetch(url, { cache: 'no-store' });
 const SRC_DATA = { gh: null, worker: null };
 async function loadSource(name) {
   const url = name === 'gh' ? 'events.json?t=' + Date.now() : (store.get('feed') || DEFAULT_FEED);
-  try { SRC_DATA[name] = await getJson(url); Object.assign(S.src[name], { at: Date.now(), ok: true, updated: SRC_DATA[name].updated }); }
+  try { SRC_DATA[name] = await getJson(url); Object.assign(S.src[name], { at: Date.now(), ok: true, updated: SRC_DATA[name].updated }); store.set('last:' + name, JSON.stringify({ at: Date.now(), data: SRC_DATA[name] })); }
   catch { S.src[name].ok = false; }
   mergeTg(); invalidate();
 }
@@ -442,6 +463,24 @@ function dedupeLog(log) {
   return out;
 }
 
+// Without internet the page starts from what it saw last: channel data of any age (the banner gives its time),
+// NEPTUN targets only if under 30 minutes old (older positions would mislead).
+function restoreLast() {
+  for (const name of ['gh', 'worker']) {
+    try { const l = JSON.parse(store.get('last:' + name) || 'null'); if (l && l.data) { SRC_DATA[name] = l.data; Object.assign(S.src[name], { at: l.at, updated: l.data.updated }); } } catch {}
+  }
+  mergeTg();
+  try { const l = JSON.parse(store.get('last:neptun') || 'null'); if (l && Date.now() - l.at < 30 * 60e3) { N.threats = new Map(l.threats.map(t => [t.id, t])); N.dataAt = l.at; } } catch {}
+}
+let savedNeptun = 0;
+function saveNeptun() { if (Date.now() - savedNeptun < 20e3) return; savedNeptun = Date.now(); store.set('last:neptun', JSON.stringify({ at: N.dataAt, threats: [...N.threats.values()] })); }
+function renderOffline() {
+  const off = !navigator.onLine || (S.src.gh.ok === false && S.src.worker.ok === false && !neptunFresh());
+  const last = Math.max(S.src.gh.at, S.src.worker.at, N.dataAt);
+  $('offline').classList.toggle('show', off);
+  if (off) $('offline').textContent = (navigator.onLine ? 'Немає зв’язку з джерелами' : 'Немає інтернету') + (last ? ` — показано дані станом на ${hm(last)} (${ago(last)}${ago(last) === 'щойно' ? '' : ' тому'})` : ' — даних ще немає');
+}
+
 /* ---------- NEPTUN: live stream with REST fallback ---------- */
 function neptunConnect() {
   if (document.hidden || (N.ws && N.ws.readyState <= 1)) return;
@@ -456,7 +495,7 @@ function neptunConnect() {
     else if (env.type === 'upsert' && d && d.id) N.threats.set(d.id, d);
     else if (env.type === 'remove' && d && d.id) N.threats.delete(d.id);
     else if (env.type === 'alerts' && d) setAlerts(d);
-    N.dataAt = Date.now(); invalidate();
+    N.dataAt = Date.now(); saveNeptun(); invalidate();
   };
   ws.onclose = () => {
     if (N.ws === ws) N.ws = null;
@@ -469,7 +508,7 @@ async function neptunRest() {
   if (document.hidden) return;
   try { setAlerts(await getJson(NEPTUN + '/api/v1/alerts')); } catch {}
   if (N.mode !== 'ws' || Date.now() - N.dataAt > 90e3) {
-    try { const j = await getJson(NEPTUN + '/api/v1/threats'); N.threats = new Map((j.threats || []).map(t => [t.id, t])); N.dataAt = Date.now(); if (N.mode !== 'ws') N.mode = 'rest'; }
+    try { const j = await getJson(NEPTUN + '/api/v1/threats'); N.threats = new Map((j.threats || []).map(t => [t.id, t])); N.dataAt = Date.now(); saveNeptun(); if (N.mode !== 'ws') N.mode = 'rest'; }
     catch { if (N.mode !== 'ws') N.mode = 'off'; }
   }
   invalidate();
@@ -575,7 +614,7 @@ function render() {
   if (S.tab === 'targets') renderTargets();
   if (S.tab === 'feed') renderFeed();
   if (S.tab === 'alerts') renderAlerts();
-  renderLive();
+  renderLive(); renderOffline();
 }
 
 function renderStatus() {
@@ -797,7 +836,7 @@ function renderFeed() {
   }).join('');
 }
 
-function myIntervals(now) {
+function myIntervals(now, span = 24 * 3600e3) {
   const all = [];
   for (const k of myAreas()) {
     const a = S.tg.districts[k]; if (!a || !a.log) continue;
@@ -810,10 +849,53 @@ function myIntervals(now) {
   all.sort((a, b) => a[0] - b[0]);
   const merged = [];
   for (const iv of all) { const last = merged.at(-1); if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1]); else merged.push([...iv]); }
-  const from = now - 24 * 3600e3;
+  const from = now - span;
   return merged.filter(([, e]) => e > from).map(([s, e]) => [Math.max(s, from), Math.min(e, now)]);
 }
+// The week: alert time per day (bars) and how often each hour of the day was under alert.
+// History reaches back only as far as the collector kept it (8 days), so older days say "no data".
+const WD = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const W7 = { day: null, hour: null };
+function weekStats(now) {
+  const ivs = myIntervals(now, 8 * 86400e3);
+  const logs = myAreas().flatMap(k => S.tg.districts[k]?.log || []).map(([t]) => Date.parse(t));
+  const covered = logs.length ? Math.min(...logs) : now;
+  const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const a = new Date(midnight); a.setDate(a.getDate() - i);
+    const b = new Date(a); b.setDate(b.getDate() + 1);
+    const s = +a, e = Math.min(+b, now);
+    days.push({ s, e, known: e > covered, ms: ivs.reduce((m, [x, y]) => m + Math.max(0, Math.min(y, e) - Math.max(x, s)), 0), n: ivs.filter(([x]) => x >= s && x < e).length });
+  }
+  const from = Math.max(days[0].s, covered), hours = Array(24).fill(0);
+  for (const [x, y] of ivs) for (let t = Math.max(x, from); t < y; t += 60e3) hours[new Date(t).getHours()]++;
+  const spanDays = Math.max(1, (now - from) / 86400e3);
+  return { days, hours: hours.map(m => m / (spanDays * 60)), from, ivs: ivs.filter(([, y]) => y > from) };
+}
+function renderWeek() {
+  const now = Date.now(), w = weekStats(now);
+  const max = Math.max(...w.days.map(d => d.ms), 60e3);
+  $('days').innerHTML = w.days.map((d, i) => `<div class="day${d.known ? '' : ' none'}${i === 6 ? ' today' : ''}${W7.day === i ? ' pick' : ''}" data-i="${i}"><i style="height:${d.known ? Math.max(2, d.ms / max * 66) : 0}px"></i><span>${i === 6 ? 'сьог.' : WD[new Date(d.s).getDay()]}</span></div>`).join('');
+  const d = W7.day != null ? w.days[W7.day] : null;
+  const DAYS = ['Неділя', 'Понеділок', 'Вівторок', 'Середа', 'Четвер', 'П’ятниця', 'Субота'];
+  const date = x => DAYS[new Date(x).getDay()] + ', ' + new Date(x).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
+  const total = w.ivs.reduce((m, [x, y]) => m + y - x, 0), longest = w.ivs.reduce((m, [x, y]) => Math.max(m, y - x), 0);
+  $('dayCap').innerHTML = d ? (d.known ? `${date(d.s)}: <b>${d.n} ${plural(d.n, ['тривога', 'тривоги', 'тривог'])}</b>, разом <b>${dur(d.ms)}</b>` : `${date(d.s)}: даних ще немає`)
+    : w.ivs.length ? `<b>${w.ivs.length} ${plural(w.ivs.length, ['тривога', 'тривоги', 'тривог'])}</b> · разом <b>${dur(total)}</b> · найдовша <b>${dur(longest)}</b>` : '<b>Тривог не було</b>';
+  const hmax = Math.max(...w.hours, .01);
+  $('hours').innerHTML = w.hours.map((v, h) => `<i data-h="${h}"${W7.hour === h ? ' class="pick"' : ''}><b style="opacity:${v ? (.15 + .85 * v / hmax).toFixed(2) : 0}"></b></i>`).join('');
+  const top = w.hours.indexOf(Math.max(...w.hours));
+  const hh = h => String(h).padStart(2, '0') + ':00';
+  const h = W7.hour ?? (w.hours[top] > 0 ? top : null);
+  $('hourCap').innerHTML = h == null ? 'Тривог за цей час не було' : `${W7.hour == null ? 'Найчастіше ' : ''}<b>${hh(h)}–${hh((h + 1) % 24)}</b>: тривога ${Math.round(w.hours[h] * 100)}% часу`;
+  const daysKnown = Math.round((now - w.from) / 86400e3);
+  $('weekNote').textContent = !myAreas().length ? 'лише для Житомирщини' : daysKnown < 7 ? `дані за ${Math.max(1, daysKnown)} ${plural(Math.max(1, daysKnown), ['день', 'дні', 'днів'])}` : '';
+}
+$('days').addEventListener('click', e => { const d = e.target.closest('.day'); if (!d) return; W7.day = W7.day === +d.dataset.i ? null : +d.dataset.i; renderWeek(); });
+$('hours').addEventListener('click', e => { const h = e.target.closest('[data-h]'); if (!h) return; W7.hour = W7.hour === +h.dataset.h ? null : +h.dataset.h; renderWeek(); });
 function renderAlerts() {
+  renderWeek();
   const now = Date.now(), from = now - 24 * 3600e3, ivs = myIntervals(now);
   const pct = t => ((t - from) / (now - from) * 100).toFixed(2);
   let bar = '';
@@ -945,7 +1027,9 @@ addEventListener('pagehide', () => { if (S.tab === 'feed') markSeen(); });
 function setMap(name) {
   const m = MAPS[name] ? name : 'dimap';
   store.set('map', m);
-  if ($('mapFrame').dataset.m !== m) { $('mapFrame').src = MAPS[m]; $('mapFrame').dataset.m = m; }
+  // Offline the frame would show the browser's error page over the fallback text, so it waits for the network.
+  $('mapFrame').style.display = navigator.onLine ? '' : 'none';
+  if (navigator.onLine && $('mapFrame').dataset.m !== m) { $('mapFrame').src = MAPS[m]; $('mapFrame').dataset.m = m; }
   $('mapLink').href = m === 'neptun' ? 'https://neptun.in.ua/' : MAPS[m];
   document.querySelectorAll('#mapSel button').forEach(b => b.classList.toggle('on', b.dataset.map === m));
 }
@@ -1074,6 +1158,7 @@ $('done').onclick = closeDlg;
 $('dlg').onclick = e => { if (e.target.id === 'dlg') closeDlg(); };
 
 /* ---------- start ---------- */
+restoreLast();
 setMap(store.get('map') || 'dimap');
 renderLoc();
 setTab(['targets', 'feed', 'alerts'].includes(S.tab) ? S.tab : 'targets');
@@ -1085,6 +1170,10 @@ setInterval(neptunRest, 20000);
 setInterval(() => { if (dirty) render(); }, 1000);
 setInterval(() => { if (S.tab === 'targets' && open) renderRadar(nearbyTargets()); }, 2000);
 setInterval(invalidate, 10000); // timers and minutes-to-arrival stay current
+addEventListener('online', () => { setMap(store.get('map') || 'dimap'); loadSource('gh'); loadSource('worker'); neptunRest(); neptunConnect(); invalidate(); });
+addEventListener('offline', invalidate);
+// The page itself opens without internet: sw.js keeps the last copy.
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
 document.addEventListener('visibilitychange', () => { if (document.hidden) { if (N.ws) N.ws.close(); } else { loadSource('gh'); loadSource('worker'); neptunRest(); neptunConnect(); } });
 </script>
 </body>
