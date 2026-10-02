@@ -11,7 +11,12 @@ try { prev = JSON.parse(readFileSync(file, 'utf8')); } catch {}
 // 8 days of alert history: the dashboard's weekly statistics are built from it.
 const d = await collect({ ...process.env, PAGES_LOCAL: process.env.PAGES_LOCAL || 2, HISTORY_HOURS: process.env.HISTORY_HOURS || 192 }, prev.districts);
 for (const e of d.errors) console.error('warn:', e);
-const key = x => JSON.stringify([x.districts, x.events]);
+// Explosions and air-defence posts for the last 7 days ("Де були вибухи"): the events list itself covers a day.
+const seen = new Set();
+d.hits = [...d.events.filter(e => e.type === 'hit' || e.type === 'pvo'), ...(prev.hits || [])]
+  .filter(e => Date.now() - Date.parse(e.time) < 7 * 86400e3 && !seen.has(e.url) && seen.add(e.url))
+  .sort((a, b) => b.time.localeCompare(a.time));
+const key = x => JSON.stringify([x.districts, x.events, x.hits]);
 const changed = key(prev) !== key(d);
 const due = !prev.updated || Date.now() - Date.parse(prev.updated) >= MIN_GAP;
 if (changed && due) writeFileSync(file, JSON.stringify(d) + '\n');
