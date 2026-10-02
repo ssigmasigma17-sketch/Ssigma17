@@ -6,10 +6,12 @@
 <meta name="theme-color" content="#07080b">
 <meta name="apple-mobile-web-app-title" content="Житомир">
 <title>Житомир — небо</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
+/* Manrope (SIL Open Font License), served with the page so it is there offline too */
+@font-face{font-family:Manrope;font-style:normal;font-weight:500 800;font-display:swap;src:url(fonts/manrope-cyrillic-ext.woff2) format('woff2');unicode-range:U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F}
+@font-face{font-family:Manrope;font-style:normal;font-weight:500 800;font-display:swap;src:url(fonts/manrope-cyrillic.woff2) format('woff2');unicode-range:U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116}
+@font-face{font-family:Manrope;font-style:normal;font-weight:500 800;font-display:swap;src:url(fonts/manrope-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:Manrope;font-style:normal;font-weight:500 800;font-display:swap;src:url(fonts/manrope-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
 :root{
   --bg:#07080b;--sheet:#101218;--card:#171a22;--card2:#1e222c;--line:rgba(255,255,255,.07);
   --txt:#f4f5f8;--mut:#8b93a4;--dim:#5d6475;
@@ -126,6 +128,8 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .rhead span{font-size:13px;font-weight:800;color:var(--mut);letter-spacing:.04em;text-transform:uppercase}
 .rhead .mini{background:var(--card2)}.rhead .mini button{padding:6px 9px}.rhead .mini button.on{background:#2c313d}
 .radar svg{cursor:pointer}
+.radar .trk{fill:none;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round;opacity:.6}
+.radar .trk.est{stroke-dasharray:1.5 2.5;opacity:.45}
 .radar .selring{fill:none;stroke:var(--txt);stroke-width:1.1}
 #rsel .tgt{margin-top:10px;padding:10px 12px;border:0;border-radius:14px;background:var(--card2)}
 .rhint{margin-top:8px;text-align:center;font-size:12px;font-weight:600;color:var(--dim)}
@@ -199,6 +203,14 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
 .hours i{height:24px;border-radius:3px;background:var(--card2);position:relative}
 .hours i b{position:absolute;inset:0;border-radius:inherit;background:var(--red)}
 .hours i.pick{box-shadow:0 0 0 1.5px var(--txt)}
+.hits .hrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.hits .hrow:first-of-type{border-top:0}
+.hits .hrow.on{margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:12px;background:color-mix(in srgb,var(--c) 12%,transparent)}
+.hits .hrow i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--c)}
+.hits .hrow b{flex:1;min-width:0;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hits .hrow small{flex:none;font-size:12px;font-weight:700;color:var(--dim)}
+.hits .hrow em{flex:none;font-style:normal;font-size:13px;font-weight:800;padding:2px 9px;border-radius:99px;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
+.hits h3 .mini{margin-left:auto;background:var(--card2)}.hits h3 .mini button{padding:5px 9px;font-size:12px;letter-spacing:0;text-transform:none}.hits h3 .mini button.on{background:#2c313d}
 .offline{display:none;margin-top:10px;padding:8px 12px;border-radius:12px;font-size:12.5px;font-weight:700;color:#ffc451;background:color-mix(in srgb,var(--amber) 13%,var(--card))}
 .offline.show{display:block}
 .drow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
@@ -297,6 +309,7 @@ body.on .st h1{color:#ff6b6b}body.on.yellow .st h1{color:#ffc451}body.off .st h1
       <div class="chips" id="chips">
         <button data-f="all" class="on">Усе</button><button data-f="course">Курс</button><button data-f="hit">Вибухи</button><button data-f="pvo">ППО</button>
       </div>
+      <div class="card hits" id="hits" hidden></div>
       <div id="list"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
       <p class="foot">Повідомлення автоматично збираються з відкритих Telegram-каналів про Житомирщину й можуть бути неточними. Однакові повідомлення з кількох каналів об’єднано.</p>
     </div>
@@ -407,13 +420,14 @@ const sector = b => Math.round(b / 45) % 8;
 
 /* ---------- state ---------- */
 const S = {
-  tg: { districts: {}, events: [] },
+  tg: { districts: {}, events: [], hits: [] },
+  hitDays: 1, hitPlace: null,
   src: { worker: { at: 0, ok: null, updated: null }, gh: { at: 0, ok: null, updated: null } },
   tab: store.get('tab') || 'targets', filter: 'all',
   lastOn: null, offSeen: null, seenBefore: +(store.get('seen') || 0) || Date.now(),
   range: store.get('range') || 'auto', autoKm: 200, sel: null, warned: new Set(), warnReady: false,
 };
-const N = { threats: new Map(), alerts: null, alertsAt: 0, dataAt: 0, ws: null, mode: 'connecting', retry: 0 };
+const N = { tracks: new Map(), threats: new Map(), alerts: null, alertsAt: 0, dataAt: 0, ws: null, mode: 'connecting', retry: 0 };
 
 const q = new URLSearchParams(location.search).get('feed');
 if (q) { store.set('feed', q); history.replaceState(null, '', location.pathname); }
@@ -455,7 +469,11 @@ function mergeTg() {
     for (const e of x.events || []) if (!seen.has(e.url)) { seen.add(e.url); events.push(e); }
   }
   events.sort((a, b) => b.time.localeCompare(a.time));
-  S.tg = { districts, events };
+  // Explosion / air-defence posts: the collector keeps 7 days of them, the events lists add the newest.
+  const hits = [], hseen = new Set();
+  for (const e of [...(SRC_DATA.gh?.hits || []), ...events.filter(e => e.type === 'hit' || e.type === 'pvo')]) if (!hseen.has(e.url)) { hseen.add(e.url); hits.push(e); }
+  hits.sort((a, b) => b.time.localeCompare(a.time));
+  S.tg = { districts, events, hits };
 }
 function dedupeLog(log) {
   const out = [];
@@ -470,10 +488,21 @@ function restoreLast() {
     try { const l = JSON.parse(store.get('last:' + name) || 'null'); if (l && l.data) { SRC_DATA[name] = l.data; Object.assign(S.src[name], { at: l.at, updated: l.data.updated }); } } catch {}
   }
   mergeTg();
-  try { const l = JSON.parse(store.get('last:neptun') || 'null'); if (l && Date.now() - l.at < 30 * 60e3) { N.threats = new Map(l.threats.map(t => [t.id, t])); N.dataAt = l.at; } } catch {}
+  try { const l = JSON.parse(store.get('last:neptun') || 'null'); if (l && Date.now() - l.at < 30 * 60e3) { N.threats = new Map(l.threats.map(t => [t.id, t])); N.tracks = new Map(l.tracks || []); N.dataAt = l.at; } } catch {}
+}
+// Each target's reported positions over the last 25 minutes: its path on the radar.
+function recordTracks() {
+  const now = Date.now();
+  for (const t of N.threats.values()) {
+    if (t.areaOnly || !Number.isFinite(t.lat) || !Number.isFinite(t.lon)) continue;
+    const tr = N.tracks.get(t.id) || [], last = tr.at(-1);
+    if (!last || distKm({ lat: last[1], lon: last[2] }, t) > .5) tr.push([Date.parse(t.confirmedAt || t.updatedAt || '') || now, t.lat, t.lon]);
+    N.tracks.set(t.id, tr.filter(p => now - p[0] < 25 * 60e3).slice(-40));
+  }
+  for (const id of N.tracks.keys()) if (!N.threats.has(id)) N.tracks.delete(id);
 }
 let savedNeptun = 0;
-function saveNeptun() { if (Date.now() - savedNeptun < 20e3) return; savedNeptun = Date.now(); store.set('last:neptun', JSON.stringify({ at: N.dataAt, threats: [...N.threats.values()] })); }
+function saveNeptun() { if (Date.now() - savedNeptun < 20e3) return; savedNeptun = Date.now(); store.set('last:neptun', JSON.stringify({ at: N.dataAt, threats: [...N.threats.values()], tracks: [...N.tracks] })); }
 function renderOffline() {
   const off = !navigator.onLine || (S.src.gh.ok === false && S.src.worker.ok === false && !neptunFresh());
   const last = Math.max(S.src.gh.at, S.src.worker.at, N.dataAt);
@@ -495,7 +524,7 @@ function neptunConnect() {
     else if (env.type === 'upsert' && d && d.id) N.threats.set(d.id, d);
     else if (env.type === 'remove' && d && d.id) N.threats.delete(d.id);
     else if (env.type === 'alerts' && d) setAlerts(d);
-    N.dataAt = Date.now(); saveNeptun(); invalidate();
+    N.dataAt = Date.now(); recordTracks(); saveNeptun(); invalidate();
   };
   ws.onclose = () => {
     if (N.ws === ws) N.ws = null;
@@ -508,7 +537,7 @@ async function neptunRest() {
   if (document.hidden) return;
   try { setAlerts(await getJson(NEPTUN + '/api/v1/alerts')); } catch {}
   if (N.mode !== 'ws' || Date.now() - N.dataAt > 90e3) {
-    try { const j = await getJson(NEPTUN + '/api/v1/threats'); N.threats = new Map((j.threats || []).map(t => [t.id, t])); N.dataAt = Date.now(); saveNeptun(); if (N.mode !== 'ws') N.mode = 'rest'; }
+    try { const j = await getJson(NEPTUN + '/api/v1/threats'); N.threats = new Map((j.threats || []).map(t => [t.id, t])); N.dataAt = Date.now(); recordTracks(); saveNeptun(); if (N.mode !== 'ws') N.mode = 'rest'; }
     catch { if (N.mode !== 'ws') N.mode = 'off'; }
   }
   invalidate();
@@ -743,10 +772,11 @@ function renderRadar(list) {
     for (const r of RINGS[km]) svg += `<circle class="ring" r="${r * k}"/><text class="ringlbl" x="2" y="${-r * k + 7}">${r === km ? r + ' км' : r}</text>`;
     svg += '<text class="side" y="-104" text-anchor="middle">Пн</text><text class="side" x="104" y="2.4">Сх</text><text class="side" y="109" text-anchor="middle">Пд</text><text class="side" x="-104" y="2.4" text-anchor="end">Зх</text>';
     for (const [n, lat, lon, upTo] of [['Житомир', ZHYTOMYR.lat, ZHYTOMYR.lon], ...TOWNS]) { if (upTo && km > upTo) continue; const [x, y] = xy({ lat, lon }); const d = Math.hypot(x, y); if (d > R - 4 || d < 3) continue; svg += `<g class="town"><circle cx="${x}" cy="${y}" r="1.6"/><text x="${x + 3}" y="${y + 2}">${n}</text></g>`; }
-    svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">${esc(here)}</text></g><g class="tgts"></g></svg>`;
+    svg += `<g class="home"><circle r="2.8"/><text x="0" y="10" text-anchor="middle">${esc(here)}</text></g><defs><clipPath id="rclip"><circle r="${R}"/></clipPath></defs><g class="trks" clip-path="url(#rclip)"></g><g class="tgts"></g></svg>`;
     $('radar').innerHTML = svg;
   }
   const layer = $('radar').querySelector('.tgts'), seen = new Set();
+  let paths = '';
   for (const a of list) {
     if (a.areaOnly) continue;
     const id = tid(a);
@@ -760,8 +790,14 @@ function renderRadar(list) {
     if (!g) { g = document.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'tg'); g.style.transform = pos; layer.appendChild(g); radarTargets.set(id, g); }
     else g.style.transform = pos;
     g.style.opacity = a.advisory || a.stale ? '.45' : far ? '.75' : '1';
-    // Fading dots behind the silhouette show where it came from.
-    const trail = a.hdg !== null ? `<g transform="rotate(${Math.round(a.hdg)})" fill="${a.color}"><circle cy="9.5" r="1.2" opacity=".5"/><circle cy="13.5" r="1" opacity=".3"/><circle cy="17.5" r=".8" opacity=".15"/></g>` : '';
+    // The path it flew (reported positions), dashed from the last report to where it is estimated now.
+    const pts = far ? [] : (N.tracks.get(a.t.id) || []).map(([, lat, lon]) => xy({ lat, lon }));
+    const lastPt = pts.at(-1), est = lastPt && Math.hypot(lastPt[0] - x, lastPt[1] - y) > 1.5;
+    const P = q => q.map(v => v.toFixed(1)).join(',');
+    if (pts.length > 1) paths += `<polyline class="trk" stroke="${a.color}" points="${pts.map(P).join(' ')}"/>`;
+    if (est) paths += `<polyline class="trk est" stroke="${a.color}" points="${P(lastPt)} ${P([x, y])}"/>`;
+    // Without a path yet, fading dots behind the silhouette show where it came from.
+    const trail = pts.length < 2 && !est && a.hdg !== null ? `<g transform="rotate(${Math.round(a.hdg)})" fill="${a.color}"><circle cy="9.5" r="1.2" opacity=".5"/><circle cy="13.5" r="1" opacity=".3"/><circle cy="17.5" r=".8" opacity=".15"/></g>` : '';
     const pulse = a.toMe?.direct ? '<circle class="pulse" r="5"><animate attributeName="r" from="5" to="16" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" from="1" to="0" dur="1.6s" repeatCount="indefinite"/></circle>' : '';
     const ring = id === S.sel ? '<circle class="selring" r="11"/>' : '';
     if (ring && g !== layer.lastChild) layer.appendChild(g); // the selected one on top
@@ -771,6 +807,8 @@ function renderRadar(list) {
     if (g.__inner !== inner) { g.innerHTML = inner; g.__inner = inner; }
   }
   for (const [id, g] of radarTargets) if (!seen.has(id)) { g.remove(); radarTargets.delete(id); radarPos.delete(id); }
+  const trks = $('radar').querySelector('.trks');
+  if (trks.__p !== paths) { trks.innerHTML = paths; trks.__p = paths; }
 }
 // A tap picks the nearest target within a finger's reach; a tap on it again or on empty space clears the choice.
 $('radar').addEventListener('click', e => {
@@ -819,12 +857,40 @@ function highlight(text, words) {
   for (const w of [...(words || [])].sort((a, b) => b.length - a.length)) html = html.split(esc(w)).join(`<mark>${esc(w)}</mark>`);
   return html;
 }
+// Where it exploded (or air defence worked): places from the posts, one count per event seen by several channels.
+const hitPlaces = e => e.places?.length ? e.places : [e.city ? 'Житомир' : 'Без точного місця'];
+function when(t) {
+  const d = new Date(t), today = new Date(); today.setHours(0, 0, 0, 0);
+  return d >= today ? 'сьогодні ' + hm(t) : d >= today - 86400e3 ? 'вчора ' + hm(t) : d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'numeric' }) + ' ' + hm(t);
+}
+function renderHits(events, f) {
+  const by = new Map();
+  for (const c of clusters(events)) for (const p of new Set(c.items.flatMap(hitPlaces))) {
+    const r = by.get(p) || { n: 0, last: 0 };
+    r.n++; r.last = Math.max(r.last, c.t); by.set(p, r);
+  }
+  const rows = [...by].sort((a, b) => b[1].n - a[1].n || b[1].last - a[1].last);
+  if (S.hitPlace && !by.has(S.hitPlace)) S.hitPlace = null;
+  const c = f === 'hit' ? 'var(--red)' : 'var(--blue)';
+  $('hits').style.setProperty('--c', c);
+  $('hits').innerHTML = `<h3>${f === 'hit' ? 'Де були вибухи' : 'Де працювала ППО'}<div class="mini" id="hitDays"><button data-d="1" class="${S.hitDays === 1 ? 'on' : ''}">Доба</button><button data-d="7" class="${S.hitDays === 7 ? 'on' : ''}">Тиждень</button></div></h3>`
+    + (rows.length ? rows.slice(0, 12).map(([p, r]) => `<div class="hrow${S.hitPlace === p ? ' on' : ''}" data-p="${esc(p)}"><i></i><b>${esc(p)}</b><small>${when(r.last)}</small><em>${r.n}</em></div>`).join('')
+      : `<div class="empty" style="padding:12px">${S.hitDays === 7 ? 'За тиждень' : 'За добу'} повідомлень немає</div>`)
+    + (S.hitDays === 7 && !(SRC_DATA.gh?.hits) ? '<p class="foot" style="margin-top:6px">Тижнева історія ще збирається.</p>' : '');
+}
+$('hits').addEventListener('click', e => {
+  const d = e.target.closest('[data-d]'); if (d) { S.hitDays = +d.dataset.d; S.hitPlace = null; renderFeed(); return; }
+  const r = e.target.closest('.hrow'); if (r) { S.hitPlace = S.hitPlace === r.dataset.p ? null : r.dataset.p; renderFeed(); }
+});
 function renderFeed() {
   const f = S.filter;
-  const events = S.tg.events.filter(e => f === 'all' ? mins(e.time) < 24 * 60 : f === 'course' ? (e.type === 'course' || e.type === 'warn') && mins(e.time) < 180 : e.type === f);
+  const boom = f === 'hit' || f === 'pvo';
+  let events = boom ? S.tg.hits.filter(e => e.type === f && mins(e.time) < S.hitDays * 24 * 60) : S.tg.events.filter(e => f === 'all' ? mins(e.time) < 24 * 60 : f === 'course' ? (e.type === 'course' || e.type === 'warn') && mins(e.time) < 180 : e.type === f);
   const el = $('list');
   if (!S.src.gh.at && !S.src.worker.at) return;
-  if (!events.length) { el.innerHTML = `<div class="empty">${glyph({ all: 'moon', course: 'course', hit: 'house', pvo: 'shield' }[f])}${f === 'course' ? 'За останні 3 години повідомлень про курс немає' : 'За добу повідомлень немає'}</div>`; return; }
+  $('hits').hidden = !boom;
+  if (boom) { renderHits(events, f); if (S.hitPlace) events = events.filter(e => hitPlaces(e).includes(S.hitPlace)); }
+  if (!events.length) { el.innerHTML = `<div class="empty">${glyph({ all: 'moon', course: 'course', hit: 'house', pvo: 'shield' }[f])}${f === 'course' ? 'За останні 3 години повідомлень про курс немає' : boom && S.hitDays === 7 ? 'За тиждень повідомлень немає' : 'За добу повідомлень немає'}</div>`; return; }
   el.innerHTML = clusters(events).slice(0, 60).map(c => {
     const e = c.items[0], chans = [...new Map(c.items.map(i => [i.channel, i])).values()];
     const isNew = c.items.some(i => Date.parse(i.time) > S.seenBefore);
@@ -1018,7 +1084,7 @@ function setTab(t) {
 }
 function markSeen() { S.seenBefore = Date.now(); store.set('seen', String(S.seenBefore)); }
 document.querySelectorAll('#seg button').forEach(b => b.onclick = () => setTab(b.dataset.t));
-document.querySelectorAll('#chips button').forEach(b => b.onclick = () => { S.filter = b.dataset.f; document.querySelectorAll('#chips button').forEach(x => x.classList.toggle('on', x === b)); renderFeed(); });
+document.querySelectorAll('#chips button').forEach(b => b.onclick = () => { S.filter = b.dataset.f; S.hitPlace = null; document.querySelectorAll('#chips button').forEach(x => x.classList.toggle('on', x === b)); renderFeed(); });
 $('list').addEventListener('click', e => { if (e.target.closest('a')) return; const ev = e.target.closest('.ev'); if (ev) ev.classList.toggle('full'); });
 $('brief').addEventListener('click', e => { if (e.target.closest('a')) return; e.stopPropagation(); if ($('brief').dataset.id) S.sel = $('brief').dataset.id; setTab(nearbyTargets().length ? 'targets' : 'feed'); snap(true); });
 addEventListener('pagehide', () => { if (S.tab === 'feed') markSeen(); });
