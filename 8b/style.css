@@ -290,8 +290,6 @@ main { padding-top: 22px; }
 .lesson.past { opacity: 0.55; }
 
 /* ---------- дзвінки ---------- */
-.bells-head { display: grid; gap: 4px; }
-.bells-head p { margin: 0; }
 .bells { list-style: none; margin: 0; padding: 0; max-width: 620px; display: grid; }
 .bell {
   display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 12px;
