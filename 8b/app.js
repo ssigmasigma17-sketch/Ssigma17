@@ -1,0 +1,526 @@
+(() => {
+  const C = window.CLASS;
+  const $ = id => document.getElementById(id);
+  const h = (tag, cls, text) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  };
+
+  // ---------- сховище браузера ----------
+  const store = {
+    get(k, def = null) { try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch { return def; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+  let token = store.get('token');
+  if (!token) {
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    token = [...a].map(b => b.toString(16).padStart(2, '0')).join('');
+    store.set('token', token);
+  }
+
+  // ---------- час (завжди київський) ----------
+  const toMin = s => { const [hh, mm] = s.split(':').map(Number); return hh * 60 + mm; };
+  const BELLS = C.bells.map(([a, b]) => [toMin(a), toMin(b)]);
+  const fmt = m => `${Math.floor(m / 60)}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+  const DOW = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота'];
+  const DOW_S = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  const DOW_ON = ['у неділю', 'у понеділок', 'у вівторок', 'у середу', 'у четвер', 'у пʼятницю', 'у суботу'];
+  const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+  const KYIV = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+
+  function kyivNow() {
+    const p = Object.fromEntries(KYIV.formatToParts(new Date()).map(x => [x.type, x.value]));
+    const date = `${p.year}-${p.month}-${p.day}`;
+    return { date, dow: dowOf(date), min: +p.hour * 60 + +p.minute + +p.second / 60, hms: `${p.hour}:${p.minute}:${p.second}` };
+  }
+  const utc = date => { const [y, m, d] = date.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  const dowOf = date => utc(date).getUTCDay();
+  const addDays = (date, n) => { const t = utc(date); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const dayNum = date => +date.slice(8, 10);
+  const longDate = date => `${dayNum(date)} ${MONTHS[+date.slice(5, 7) - 1]}`;
+
+  const lessonsOf = dow => (dow >= 1 && dow <= 5 ? C.week[dow - 1] : null);
+  const span = L => {
+    const idx = L.map((l, i) => (l ? i : -1)).filter(i => i >= 0);
+    return { first: idx[0], last: idx[idx.length - 1], count: idx.length };
+  };
+  const subjOf = l => l.s || l.g.map(g => g.s).join(' / ');
+  const roomOf = l => l.r || [...new Set(l.g.map(g => g.r))].join(' / ');
+  const whoOf = l => l.t || l.g.map(g => g.t.split(' ')[0]).join(' / ');
+  const dayOver = now => { const L = lessonsOf(now.dow); return !L || now.min >= BELLS[span(L).last][1]; };
+
+  function nextSchoolDay(date) {
+    let d = addDays(date, 1);
+    while (!lessonsOf(dowOf(d))) d = addDays(d, 1);
+    return d;
+  }
+  function countdown(mins) {
+    const s = Math.max(0, Math.round(mins * 60));
+    const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+    const p = n => String(n).padStart(2, '0');
+    return hh ? `${hh}:${p(mm)}:${p(ss)}` : `${p(mm)}:${p(ss)}`;
+  }
+
+  // ---------- що зараз ----------
+  function status(now) {
+    const L = lessonsOf(now.dow);
+    if (L) {
+      const { first, last, count } = span(L);
+      if (now.min < BELLS[first][0]) {
+        const l = L[first];
+        return {
+          key: 'before', label: 'До першого уроку', title: subjOf(l), count: countdown(BELLS[first][0] - now.min),
+          sub: `Початок о <b>${fmt(BELLS[first][0])}</b> · каб. ${roomOf(l)} · сьогодні ${count} ${plural(count, 'урок', 'уроки', 'уроків')}`,
+        };
+      }
+      for (let i = first; i <= last; i++) {
+        const [a, b] = BELLS[i];
+        if (now.min >= a && now.min < b && L[i]) {
+          const next = L.slice(i + 1).find(Boolean);
+          return {
+            key: `l${i}`, lesson: i, label: `${i + 1} урок · ${fmt(a)}–${fmt(b)}`, title: subjOf(L[i]),
+            count: countdown(b - now.min), ruler: [b - a, now.min - a],
+            sub: `${whoOf(L[i])} · каб. ${roomOf(L[i])}${next ? ` · далі <b>${subjOf(next)}</b>` : ' · останній урок'}`,
+          };
+        }
+        const nextI = L.findIndex((x, j) => j > i && x);
+        if (nextI > 0 && now.min >= b && now.min < BELLS[nextI][0]) {
+          const len = BELLS[nextI][0] - b, note = C.breakNotes[i + 1];
+          return {
+            key: `b${i}`, brk: i, label: `Перерва ${len} хв${note ? ' · ' + note : ''}`, title: `Далі: ${subjOf(L[nextI])}`,
+            count: countdown(BELLS[nextI][0] - now.min), ruler: [len, now.min - b],
+            sub: `${nextI + 1} урок о <b>${fmt(BELLS[nextI][0])}</b> · каб. ${roomOf(L[nextI])}`,
+          };
+        }
+      }
+    }
+    const nd = nextSchoolDay(now.date), NL = lessonsOf(dowOf(nd)), { first, count } = span(NL);
+    const when = nd === addDays(now.date, 1) ? 'завтра' : DOW_ON[dowOf(nd)];
+    return {
+      key: 'off', label: L ? 'Уроки закінчились' : 'Вихідний',
+      title: `${cap(when)} перший — ${subjOf(NL[first])}`, count: fmt(BELLS[first][0]),
+      sub: `${cap(when)} ${count} ${plural(count, 'урок', 'уроки', 'уроків')}, каб. ${roomOf(NL[first])}`,
+    };
+  }
+  const cap = s => s[0].toUpperCase() + s.slice(1);
+  function plural(n, one, few, many) {
+    const a = n % 10, b = n % 100;
+    return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
+  }
+
+  // ---------- шапка ----------
+  let lastKey = '';
+  function tick() {
+    const now = kyivNow();
+    $('today-dow').textContent = DOW[now.dow];
+    $('today-date').textContent = longDate(now.date);
+    $('clock').textContent = now.hms;
+    const st = status(now);
+    $('now-label').textContent = st.label;
+    $('now-title').textContent = st.title;
+    $('now-count').textContent = st.count;
+    $('now-sub').innerHTML = st.sub;
+    $('ruler').hidden = !st.ruler;
+    if (st.ruler) {
+      $('ruler').querySelector('.ruler-ticks').style.setProperty('--mins', st.ruler[0]);
+      $('ruler-fill').style.width = `${Math.min(100, (st.ruler[1] / st.ruler[0]) * 100)}%`;
+    }
+    const key = `${now.date}|${st.key}`;
+    if (key !== lastKey) {
+      const dayChanged = lastKey.split('|')[0] !== now.date;
+      lastKey = key;
+      renderWeek(now, st);
+      renderBells(now, st);
+      if (dayChanged || st.key === 'off') setBookDates(now);
+    }
+  }
+
+  // ---------- броні ----------
+  const SIDES = { L: 'ліве', R: 'праве' };
+  const seatName = id => { const [r, d, s] = id.split('-'); return { r, d, s, text: `ряд ${r}, парта ${d}, ${SIDES[s]} місце` }; };
+  const seatIds = [];
+  for (let r = 1; r <= C.rows; r++) for (let d = 1; d <= C.desks; d++) for (const s of 'LR') seatIds.push(`${r}-${d}-${s}`);
+  const TOTAL = seatIds.length;
+
+  // Сервер: /api/days, /api/book, /api/release (src/worker.js). Якщо його немає — демо в localStorage.
+  const server = {
+    async req(path, body) {
+      const r = await fetch((C.api || '').replace(/\/$/, '') + path, {
+        method: body ? 'POST' : 'GET',
+        headers: { 'content-type': 'application/json', 'x-token': token },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: 'no-store',
+      });
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) throw Object.assign(new Error('no api'), { noApi: true });
+      const data = await r.json();
+      if (!r.ok) throw Object.assign(new Error(data.error || 'error'), { code: data.code });
+      return data;
+    },
+    days: dates => server.req(`/api/days?dates=${dates.join(',')}`),
+    book: (date, seat, name) => server.req('/api/book', { date, seat, name }),
+    release: date => server.req('/api/release', { date }),
+  };
+
+  const demo = {
+    all() { return store.get('demo-bookings-v2', {}); },
+    day(all, date) { return (all[date] ||= { seats: {}, mine: null }); },
+    async days(dates) {
+      const all = demo.all(), days = {};
+      for (const d of dates) days[d] = demo.view(demo.day(all, d));
+      store.set('demo-bookings-v2', all);
+      return { days };
+    },
+    view(day) {
+      const seats = {};
+      for (const [k, v] of Object.entries(day.seats)) seats[k] = { name: v.name };
+      return { seats, mine: day.mine };
+    },
+    async book(date, seat, name) {
+      const all = demo.all(), day = demo.day(all, date);
+      if (day.seats[seat] && day.mine !== seat) throw Object.assign(new Error('taken'), { code: 'taken' });
+      if (day.mine) delete day.seats[day.mine];
+      day.seats[seat] = { name };
+      day.mine = seat;
+      store.set('demo-bookings-v2', all);
+      return { day: demo.view(day) };
+    },
+    async release(date) {
+      const all = demo.all(), day = demo.day(all, date);
+      if (day.mine) delete day.seats[day.mine];
+      day.mine = null;
+      store.set('demo-bookings-v2', all);
+      return { day: demo.view(day) };
+    },
+  };
+
+  let api = server;
+  let bookDates = [];
+  let selDate = null;
+  let data = {};          // date -> { seats: { id: { name } }, mine }
+  let lastSync = 0;
+
+  function setBookDates(now) {
+    const list = [];
+    let d = dayOver(now) ? nextSchoolDay(now.date) : now.date;
+    while (list.length < C.bookDays) { list.push(d); d = nextSchoolDay(d); }
+    if (list.join() === bookDates.join()) return;
+    bookDates = list;
+    if (!bookDates.includes(selDate)) selDate = bookDates[0];
+    renderDays();
+    refresh();
+  }
+
+  async function refresh() {
+    if (!bookDates.length) return;
+    try {
+      const r = await api.days(bookDates);
+      data = r.days;
+      lastSync = Date.now();
+    } catch (e) {
+      // сервер жодного разу не відповів — сайт відкрито без нього (GitHub Pages, локальний файл)
+      if (api === server && !lastSync && (e.noApi || e instanceof TypeError)) {
+        api = demo;
+        $('demo').hidden = false;
+        return refresh();
+      }
+      $('sync').textContent = 'немає звʼязку';
+      $('sync').classList.add('off');
+      return;
+    }
+    renderDays();
+    renderRoom();
+  }
+
+  function renderDays() {
+    const box = $('days'), today = kyivNow().date;
+    box.textContent = '';
+    for (const d of bookDates) {
+      const b = h('button', 'day');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(d === selDate));
+      b.setAttribute('aria-label', `${DOW[dowOf(d)]}, ${longDate(d)}`);
+      b.append(h('span', 'd-dow', DOW_S[dowOf(d)]), h('span', 'd-num', dayNum(d)));
+      const bar = h('span', 'd-bar'), fill = h('i');
+      const n = data[d] ? Object.keys(data[d].seats).length : 0;
+      fill.style.width = `${(n / TOTAL) * 100}%`;
+      bar.append(fill);
+      b.append(bar, h('span', 'd-today', d === today ? 'сьогодні' : data[d]?.mine ? 'є місце' : ''));
+      b.onclick = () => { selDate = d; renderDays(); renderRoom(); };
+      box.append(b);
+    }
+  }
+
+  function renderRoom() {
+    const day = data[selDate] || { seats: {}, mine: null };
+    const taken = Object.keys(day.seats).length;
+    $('room-day').textContent = `${cap(DOW[dowOf(selDate)])}, ${longDate(selDate)}`;
+    $('tally').innerHTML = `<b>${TOTAL - taken}</b>вільних із ${TOTAL}`;
+    const rows = $('rows');
+    rows.style.setProperty('--rows', C.rows);
+    rows.textContent = '';
+    for (let d = 1; d <= C.desks; d++) {
+      rows.append(h('div', 'desk-no', d));
+      for (let r = 1; r <= C.rows; r++) {
+        const desk = h('div', 'desk');
+        for (const s of 'LR') desk.append(seatButton(`${r}-${d}-${s}`, day));
+        rows.append(desk);
+      }
+    }
+    rows.append(h('div'));
+    for (let r = 1; r <= C.rows; r++) rows.append(h('div', 'row-name', `${r} ряд`));
+    fitNames();
+    const sync = $('sync');
+    sync.classList.remove('off');
+    sync.textContent = api === demo ? 'демо' : lastSync ? `оновлено ${new Date(lastSync).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv' })}` : '';
+  }
+
+  // імʼя на парті зменшується, доки не влізе в місце
+  function fitNames() {
+    for (const el of $('rows').querySelectorAll('.nm')) {
+      let fs = parseFloat(getComputedStyle(el).fontSize);
+      while (el.scrollWidth > el.clientWidth + 0.5 && fs > 10) {
+        fs -= 0.5;
+        el.style.fontSize = `${fs}px`;
+      }
+    }
+  }
+  window.addEventListener('resize', () => { if (bookDates.length) renderRoom(); });
+  document.fonts?.ready.then(() => { if (bookDates.length) renderRoom(); });
+
+  let popSeat = null;
+  function seatButton(id, day) {
+    const b = h('button', 'seat');
+    b.type = 'button';
+    b.dataset.seat = id;
+    const who = day.seats[id];
+    const label = seatName(id).text;
+    if (!who) {
+      b.classList.add('free');
+      b.append(h('span', 'plus', '+'));
+      b.setAttribute('aria-label', `${label}: вільно`);
+    } else {
+      const first = who.name.split(/\s+/)[0];
+      b.classList.add(day.mine === id ? 'mine' : 'taken');
+      b.append(h('span', 'nm', first));
+      b.setAttribute('aria-label', `${label}: ${day.mine === id ? 'твоє місце' : who.name}`);
+    }
+    if (popSeat === id) { b.classList.add('pop'); popSeat = null; }
+    b.onclick = () => onSeat(id);
+    return b;
+  }
+
+  function onSeat(id) {
+    const day = data[selDate] || { seats: {}, mine: null };
+    const who = day.seats[id];
+    if (who && day.mine !== id) return toast(`${who.name} · ${seatName(id).text}`);
+    openSheet(id, day);
+  }
+
+  // ---------- аркуш ----------
+  let sheetSeat = null;
+  function openSheet(id, day) {
+    sheetSeat = id;
+    const mine = day.mine === id;
+    const sn = seatName(id);
+    $('sheet-eyebrow').textContent = `${DOW[dowOf(selDate)]}, ${longDate(selDate)}`;
+    $('sheet-title').textContent = `Ряд ${sn.r} · парта ${sn.d}`;
+    $('sheet-error').textContent = '';
+    $('sheet-form').hidden = mine;
+    $('sheet-mine').hidden = !mine;
+    if (mine) {
+      $('sheet-text').innerHTML = `Це твоє місце: <b>${SIDES[sn.s]}</b>. Звільни його, якщо не прийдеш або хочеш пересісти.`;
+    } else {
+      const was = day.mine ? seatName(day.mine) : null;
+      $('sheet-text').innerHTML = `<b>${cap(SIDES[sn.s])} місце</b>${was ? `. Твоє теперішнє місце (ряд ${was.r}, парта ${was.d}) звільниться.` : '.'}`;
+      $('sheet-submit').textContent = was ? 'Пересісти сюди' : 'Забронювати';
+      $('name-input').value = store.get('name', '');
+    }
+    $('scrim').hidden = false;
+    $('sheet').hidden = false;
+    if (!mine && !$('name-input').value) setTimeout(() => $('name-input').focus(), 250);
+  }
+  function closeSheet() { $('scrim').hidden = true; $('sheet').hidden = true; sheetSeat = null; }
+
+  $('sheet-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = $('name-input').value.trim().replace(/\s+/g, ' ');
+    if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чиє це місце.'; return; }
+    store.set('name', name);
+    const seat = sheetSeat, date = selDate;
+    $('sheet-submit').disabled = true;
+    try {
+      const r = await api.book(date, seat, name);
+      data[date] = r.day;
+      popSeat = seat;
+      closeSheet();
+      renderDays();
+      renderRoom();
+      toast(`Місце твоє ${DOW_ON[dowOf(date)]}, ${longDate(date)}`);
+    } catch (err) {
+      $('sheet-error').textContent = err.code === 'taken' ? 'Хтось щойно зайняв це місце. Обери інше.'
+        : err.code === 'date' ? 'На цей день бронювати вже не можна.'
+        : 'Не вдалося забронювати. Перевір інтернет і спробуй ще раз.';
+      if (err.code === 'taken') refresh();
+    } finally {
+      $('sheet-submit').disabled = false;
+    }
+  });
+  $('sheet-release').addEventListener('click', async () => {
+    const date = selDate;
+    $('sheet-release').disabled = true;
+    try {
+      const r = await api.release(date);
+      data[date] = r.day;
+      closeSheet();
+      renderDays();
+      renderRoom();
+      toast('Місце звільнено');
+    } catch {
+      $('sheet-error').textContent = 'Не вдалося звільнити місце. Спробуй ще раз.';
+    } finally {
+      $('sheet-release').disabled = false;
+    }
+  });
+  for (const id of ['sheet-cancel', 'sheet-close', 'scrim']) $(id).addEventListener('click', closeSheet);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+
+  let toastTimer;
+  function toast(text) {
+    const t = $('toast');
+    t.hidden = true;
+    t.textContent = text;
+    void t.offsetWidth;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.hidden = true), 2600);
+  }
+
+  // ---------- розклад ----------
+  let weekSel = null;
+  function weekDates(now) {
+    // поточний тиждень; у суботу й неділю — наступний
+    const shift = now.dow === 0 ? 1 : now.dow === 6 ? 2 : 1 - now.dow;
+    const mon = addDays(now.date, shift);
+    return [0, 1, 2, 3, 4].map(i => addDays(mon, i));
+  }
+  function renderWeek(now, st) {
+    const dates = weekDates(now);
+    if (!weekSel || !dates.includes(weekSel)) weekSel = dates.includes(now.date) ? now.date : dates[0];
+    const chips = $('week-days');
+    chips.textContent = '';
+    const box = $('week');
+    box.textContent = '';
+    dates.forEach((date, i) => {
+      const isToday = date === now.date;
+      const chip = h('button', 'day');
+      chip.type = 'button';
+      chip.setAttribute('role', 'radio');
+      chip.setAttribute('aria-checked', String(date === weekSel));
+      chip.append(h('span', 'd-dow', DOW_S[i + 1]), h('span', 'd-num', dayNum(date)), h('span', 'd-today', isToday ? 'сьогодні' : ''));
+      chip.onclick = () => { weekSel = date; renderWeek(kyivNow(), status(kyivNow())); };
+      chips.append(chip);
+
+      const L = C.week[i], { first, last, count } = span(L);
+      const col = h('div', `wday${isToday ? ' is-today' : ''}${date === weekSel ? ' shown' : ''}`);
+      const head = h('div', 'wday-head');
+      head.append(h('span', 'wday-name', `${cap(DOW[i + 1])}, ${dayNum(date)}`), h('span', 'wday-meta', `${count} ${plural(count, 'урок', 'уроки', 'уроків')}`));
+      col.append(head);
+      for (let n = 0; n <= last; n++) {
+        const l = L[n];
+        if (!l && n > first) continue;
+        const row = h('div', 'lesson');
+        row.append(h('div', 'n', n + 1));
+        const body = h('div', 'body');
+        const time = `${fmt(BELLS[n][0])}–${fmt(BELLS[n][1])}`;
+        if (!l) {
+          row.classList.add('empty');
+          body.append(h('div', 'subj', 'немає уроку'), meta(time));
+        } else {
+          body.append(h('div', 'subj', l.s || 'Дві групи'));
+          if (l.g) {
+            body.append(meta(time));
+            l.g.forEach((g, gi) => {
+              const grp = h('div', 'grp');
+              grp.append(h('span', `k ${g.k ? (g.k === 'A' ? 'ka' : 'kb') : ''}`, g.k || `гр. ${gi + 1}`));
+              const line = h('span');
+              if (g.s) line.append(h('span', 's', g.s), document.createTextNode(' · '));
+              line.append(document.createTextNode(`${g.t} · `), h('span', 'room-tag', g.r));
+              grp.append(line);
+              body.append(grp);
+            });
+          } else {
+            body.append(meta(time, l.t, l.r));
+          }
+          if (isToday && st.lesson === n) row.classList.add('now');
+          else if (isToday && now.min >= BELLS[n][1]) row.classList.add('past');
+        }
+        row.append(body);
+        col.append(row);
+      }
+      box.append(col);
+    });
+  }
+  function meta(time, who, room) {
+    const m = h('div', 'meta');
+    m.append(h('span', 'time', time));
+    if (who) m.append(h('span', '', who));
+    if (room) m.append(h('span', 'room-tag', `каб. ${room}`));
+    return m;
+  }
+
+  // ---------- дзвінки ----------
+  function renderBells(now, st) {
+    const used = Math.max(...C.week.map(L => span(L).last)) + 1;
+    const box = $('bells');
+    box.textContent = '';
+    const school = !!lessonsOf(now.dow);
+    BELLS.forEach(([a, b], i) => {
+      const li = h('li', `bell${i >= used ? ' off' : ''}`);
+      li.append(h('span', 'n', i + 1), h('span', 't', `${fmt(a)} – ${fmt(b)}`));
+      const inLesson = now.min >= a && now.min < b;
+      li.append(h('span', 'left', inLesson ? `ще ${Math.ceil(b - now.min)} хв` : ''));
+      if (inLesson) li.classList.add('now');
+      box.append(li);
+      if (i < BELLS.length - 1) {
+        const len = BELLS[i + 1][0] - b, note = C.breakNotes[i + 1];
+        const brk = h('li', `brk${len >= 15 ? ' big' : ''}`);
+        brk.append(h('span', 'len', `${len} хв`));
+        if (note) brk.append(h('span', 'note', note));
+        if (now.min >= b && now.min < BELLS[i + 1][0]) brk.classList.add('now');
+        box.append(brk);
+      }
+    });
+    if (!school) box.querySelectorAll('.now').forEach(el => el.classList.remove('now'));
+  }
+
+  // ---------- вкладки ----------
+  const TABS = ['desks', 'week', 'bells'];
+  function showTab(name) {
+    if (!TABS.includes(name)) name = 'desks';
+    for (const t of TABS) {
+      $(`tab-${t}`).setAttribute('aria-selected', String(t === name));
+      $(`panel-${t}`).hidden = t !== name;
+    }
+    store.set('tab', name);
+    if (location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
+  }
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
+
+  // ---------- старт ----------
+  $('year').textContent = C.year;
+  $('rules').append(...C.rules.map(r => h('li', '', r)));
+  showTab(location.hash.slice(1) || store.get('tab', 'desks'));
+  tick();
+  setInterval(tick, 1000);
+  setInterval(() => { if (!document.hidden && api === server) refresh(); }, 10000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+})();

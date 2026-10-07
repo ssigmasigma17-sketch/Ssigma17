@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>8-Б</title>
+<meta name="description" content="Бронювання парт, розклад уроків і дзвінків 8-Б">
+<meta name="theme-color" content="#f5f8fc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16201c" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=JetBrains+Mono:wght@400;600&family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;700;900&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+<header class="hero">
+  <div class="hero-top">
+    <h1 class="klass" aria-label="Клас 8-Б">8<span class="dash">-</span>Б</h1>
+    <div class="hero-date">
+      <span id="today-dow" class="dow"></span>
+      <span id="today-date" class="date"></span>
+      <span id="clock" class="clock mono"></span>
+    </div>
+  </div>
+
+  <section class="now" id="now" aria-live="polite">
+    <div class="now-label" id="now-label"></div>
+    <div class="now-main">
+      <div class="now-title" id="now-title"></div>
+      <div class="now-count mono" id="now-count"></div>
+    </div>
+    <div class="now-sub" id="now-sub"></div>
+    <div class="ruler" id="ruler" hidden>
+      <div class="ruler-fill" id="ruler-fill"></div>
+      <div class="ruler-ticks"></div>
+    </div>
+  </section>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Розділи">
+  <button role="tab" id="tab-desks" data-tab="desks" aria-selected="true">Парти</button>
+  <button role="tab" id="tab-week" data-tab="week" aria-selected="false">Розклад</button>
+  <button role="tab" id="tab-bells" data-tab="bells" aria-selected="false">Дзвінки</button>
+</nav>
+
+<main>
+  <!-- Парти -->
+  <section class="panel" id="panel-desks" role="tabpanel" aria-labelledby="tab-desks">
+    <div class="days" id="days" role="radiogroup" aria-label="День"></div>
+
+    <div class="room-head">
+      <div>
+        <div class="eyebrow">План класу</div>
+        <div class="room-day" id="room-day"></div>
+      </div>
+      <div class="tally" id="tally"></div>
+    </div>
+
+    <div class="room" id="room">
+      <div class="rows" id="rows"></div>
+    </div>
+
+    <div class="legend">
+      <span><i class="sw sw-free"></i>вільно</span>
+      <span><i class="sw sw-taken"></i>зайнято</span>
+      <span><i class="sw sw-mine"></i>твоє</span>
+      <span class="sync mono" id="sync"></span>
+    </div>
+
+    <div class="demo" id="demo" hidden>
+      Демо: сервер не підключено, тому броні зберігаються лише на цьому пристрої.
+    </div>
+
+    <section class="rules">
+      <h2 class="h2">Правила</h2>
+      <ol id="rules"></ol>
+    </section>
+  </section>
+
+  <!-- Розклад -->
+  <section class="panel" id="panel-week" role="tabpanel" aria-labelledby="tab-week" hidden>
+    <div class="days days-week" id="week-days" role="radiogroup" aria-label="День тижня"></div>
+    <div class="week" id="week"></div>
+  </section>
+
+  <!-- Дзвінки -->
+  <section class="panel" id="panel-bells" role="tabpanel" aria-labelledby="tab-bells" hidden>
+    <div class="bells-head">
+      <h2 class="h2">Розклад дзвінків</h2>
+      <p class="muted">Уроки по 45 хвилин. Сірим — уроки, яких у 8‑Б немає.</p>
+    </div>
+    <ol class="bells" id="bells"></ol>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>8-Б · <span id="year"></span></span>
+  <span>Розклад з rozklad.org, станом на 31.08.2026</span>
+</footer>
+
+</div>
+
+<!-- Аркуш бронювання -->
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <div class="sheet-grip"></div>
+  <div class="sheet-eyebrow" id="sheet-eyebrow"></div>
+  <h3 class="sheet-title" id="sheet-title"></h3>
+  <p class="sheet-text" id="sheet-text"></p>
+  <form id="sheet-form" autocomplete="off">
+    <label class="field" for="name-input">
+      <span>Імʼя та прізвище</span>
+      <input id="name-input" name="name" maxlength="32" placeholder="Як тебе підписати на парті" required>
+    </label>
+    <div class="sheet-actions">
+      <button type="button" class="btn ghost" id="sheet-cancel">Закрити</button>
+      <button type="submit" class="btn primary" id="sheet-submit">Забронювати</button>
+    </div>
+  </form>
+  <div class="sheet-actions" id="sheet-mine" hidden>
+    <button type="button" class="btn ghost" id="sheet-close">Закрити</button>
+    <button type="button" class="btn danger" id="sheet-release">Звільнити місце</button>
+  </div>
+  <p class="sheet-error" id="sheet-error" role="alert"></p>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
