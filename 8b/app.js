@@ -150,6 +150,7 @@
       seg.style.width = pct(t0 + (b - a));
       seg.append(h('b', '', i + 1), h('i', '', shortOf(l)));
       seg.title = `${i + 1}. ${subjOf(l)}, ${fmt(a)}–${fmt(b)}`;
+      if (hw[`${date}|${i + 1}`]) seg.classList.add('has-hw');
       track.append(seg);
       segs.push({ seg, a, b });
     });
@@ -214,7 +215,7 @@
   for (let r = 1; r <= C.rows; r++) for (let d = 1; d <= C.desks; d++) for (const s of 'LR') seatIds.push(`${r}-${d}-${s}`);
   const TOTAL = seatIds.length;
 
-  // Сервер: /api/days, /api/book, /api/release (src/worker.js). Якщо його немає — демо в localStorage.
+  // Сервер: /api/days, /api/book, /api/release, /api/hw (src/worker.js). Якщо його немає — демо в localStorage.
   const server = {
     async req(path, body) {
       const r = await fetch((C.api || '').replace(/\/$/, '') + path, {
@@ -232,6 +233,8 @@
     days: dates => server.req(`/api/days?dates=${dates.join(',')}`),
     book: (date, seat, name) => server.req('/api/book', { date, seat, name }),
     release: date => server.req('/api/release', { date }),
+    hw: (from, to) => server.req(`/api/hw?from=${from}&to=${to}`),
+    setHw: (date, lesson, text, name) => server.req('/api/hw', { date, lesson, text, name }),
   };
 
   const demo = {
@@ -264,12 +267,25 @@
       store.set('demo-bookings-v2', all);
       return { day: demo.view(day) };
     },
+    async hw(from, to) {
+      const all = store.get('demo-hw', {}), hw = {};
+      for (const [k, v] of Object.entries(all)) if (k.slice(0, 10) >= from && k.slice(0, 10) <= to) hw[k] = v;
+      return { hw };
+    },
+    async setHw(date, lesson, text, name) {
+      const all = store.get('demo-hw', {}), key = `${date}|${lesson}`;
+      if (text) all[key] = { text, by: name, at: Date.now() };
+      else delete all[key];
+      store.set('demo-hw', all);
+      return { hw: all[key] ? { [key]: all[key] } : {} };
+    },
   };
 
   let api = server;
   let bookDates = [];
   let selDate = null;
   let data = {};          // date -> { seats: { id: { name } }, mine }
+  let hw = {};            // "date|урок" -> { text, by, at }
   let lastSync = 0;
 
   function setBookDates(now) {
@@ -280,18 +296,21 @@
     bookDates = list;
     if (!bookDates.includes(selDate)) selDate = bookDates[0];
     renderDays();
+    renderHwPanel();
     refresh();
   }
 
   async function refresh() {
     if (!bookDates.length) return;
     try {
-      const r = await api.days(bookDates);
+      const week = weekDates(kyivNow());
+      const [r, w] = await Promise.all([api.days(bookDates), api.hw(week[0], addDays(week[0], 20))]);
       data = r.days;
+      hw = w.hw;
       lastSync = Date.now();
     } catch (e) {
-      // сервер жодного разу не відповів — сайт відкрито без нього (GitHub Pages, локальний файл)
-      if (api === server && !lastSync && (e.noApi || e instanceof TypeError)) {
+      // сервер не вказано і на цьому ж сайті його немає (GitHub Pages, локальний файл) — демо
+      if (api === server && !C.api && !lastSync && (e.noApi || e instanceof TypeError)) {
         api = demo;
         $('demo').hidden = false;
         return refresh();
@@ -302,7 +321,120 @@
     }
     renderDays();
     renderRoom();
+    renderHwAll();
   }
+
+  // ---------- домашка ----------
+  const hwKey = (date, n) => `${date}|${n + 1}`;
+  const hwCount = date => {
+    const L = lessonsOf(dowOf(date));
+    return L ? L.filter((l, n) => l && hw[hwKey(date, n)]).length : 0;
+  };
+  const ago = at => {
+    const t = new Date(at), today = kyivNow().date;
+    const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(t);
+    const time = t.toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' });
+    return d === today ? `сьогодні о ${time}` : d === addDays(today, -1) ? `вчора о ${time}` : `${longDate(d)} о ${time}`;
+  };
+  let hwSel = null;
+
+  function renderHwAll() {
+    renderHwPanel();
+    const now = kyivNow();
+    renderWeek(now, status(now));
+    strip = null;
+    updateStrip(now);
+  }
+
+  function renderHwPanel() {
+    if (!bookDates.length) return;
+    if (!bookDates.includes(hwSel)) hwSel = bookDates[0];
+    const chips = $('hw-days'), today = kyivNow().date;
+    chips.textContent = '';
+    for (const d of bookDates) {
+      const b = h('button', 'day'), n = hwCount(d), L = lessonsOf(dowOf(d));
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(d === hwSel));
+      b.setAttribute('aria-label', `${DOW[dowOf(d)]}, ${longDate(d)}: записано ${n}`);
+      const bar = h('span', 'd-bar'), fill = h('i');
+      fill.style.width = `${(n / span(L).count) * 100}%`;
+      bar.append(fill);
+      b.append(h('span', 'd-dow', DOW_S[dowOf(d)]), h('span', 'd-num', dayNum(d)), bar,
+        h('span', 'd-today', d === today ? 'сьогодні' : n ? `${n} д/з` : ''));
+      b.onclick = () => { hwSel = d; renderHwPanel(); };
+      chips.append(b);
+    }
+    const L = lessonsOf(dowOf(hwSel)), n = hwCount(hwSel), total = span(L).count;
+    $('hw-day').textContent = `${cap(DOW[dowOf(hwSel)])}, ${longDate(hwSel)}`;
+    $('hw-tally').innerHTML = `<b>${n}</b>записано з ${total}`;
+    const list = $('hw-list');
+    list.textContent = '';
+    L.forEach((l, i) => {
+      if (!l) return;
+      const item = hw[hwKey(hwSel, i)];
+      const li = h('li'), btn = h('button', 'hw-item');
+      btn.type = 'button';
+      const body = h('span', 'body');
+      body.append(h('span', 'subj', subjOf(l)));
+      if (item) body.append(h('span', 'hw-text', item.text), h('span', 'hw-by', `${item.by}, ${ago(item.at)}`));
+      else body.append(h('span', 'hw-add', 'записати'));
+      btn.append(h('span', 'n', i + 1), body);
+      btn.onclick = () => openHw(hwSel, i);
+      li.append(btn);
+      list.append(li);
+    });
+  }
+
+  let hwOpen = null;
+  function openHw(date, n) {
+    const L = lessonsOf(dowOf(date)), l = L && L[n];
+    if (!l) return;
+    hwOpen = { date, n };
+    const item = hw[hwKey(date, n)], name = store.get('name', '');
+    $('hw-eyebrow').textContent = `${n + 1} урок · ${DOW[dowOf(date)]}, ${longDate(date)}`;
+    $('hw-title').textContent = subjOf(l);
+    $('hw-meta').textContent = item ? `Записав(ла) ${item.by}, ${ago(item.at)}. Можна виправити.` : 'Поки нічого не записано.';
+    $('hw-text').value = item ? item.text : '';
+    $('hw-name').value = name;
+    $('hw-name-field').hidden = !!name;
+    $('hw-clear').hidden = !item;
+    $('hw-error').textContent = '';
+    $('scrim').hidden = false;
+    $('hw-sheet').hidden = false;
+    setTimeout(() => $('hw-text').focus(), 250);
+  }
+
+  async function saveHw(text) {
+    const { date, n } = hwOpen;
+    const name = $('hw-name').value.trim().replace(/\s+/g, ' ');
+    if (name.length < 2) {
+      $('hw-name-field').hidden = false;
+      $('hw-error').textContent = 'Напиши своє імʼя, щоб було видно, хто записав.';
+      return;
+    }
+    store.set('name', name);
+    $('hw-save').disabled = true;
+    try {
+      const r = await api.setHw(date, n + 1, text, name);
+      delete hw[hwKey(date, n)];
+      Object.assign(hw, r.hw);
+      buzz(10);
+      closeSheet();
+      renderHwAll();
+      toast(text ? 'Домашку записано' : 'Запис стерто');
+    } catch (err) {
+      $('hw-error').textContent = err.code === 'date' ? 'На цей день записувати вже не можна.' : 'Не вдалося зберегти. Перевір інтернет і спробуй ще раз.';
+    } finally {
+      $('hw-save').disabled = false;
+    }
+  }
+  $('hw-form').addEventListener('submit', e => {
+    e.preventDefault();
+    saveHw($('hw-text').value.trim());
+  });
+  $('hw-clear').addEventListener('click', () => saveHw(''));
+  $('hw-cancel').addEventListener('click', () => closeSheet());
 
   function renderDays() {
     const box = $('days'), today = kyivNow().date;
@@ -413,7 +545,7 @@
     $('sheet').hidden = false;
     if (!mine && !$('name-input').value) setTimeout(() => $('name-input').focus(), 250);
   }
-  function closeSheet() { $('scrim').hidden = true; $('sheet').hidden = true; sheetSeat = null; }
+  function closeSheet() { $('scrim').hidden = true; $('sheet').hidden = true; $('hw-sheet').hidden = true; sheetSeat = null; hwOpen = null; }
 
   $('sheet-form').addEventListener('submit', async e => {
     e.preventDefault();
@@ -458,7 +590,7 @@
     }
   });
   for (const id of ['sheet-cancel', 'sheet-close', 'scrim']) $(id).addEventListener('click', closeSheet);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('scrim').hidden) closeSheet(); });
 
   const buzz = p => { try { navigator.vibrate?.(p); } catch {} };
 
@@ -529,6 +661,9 @@
           } else {
             body.append(meta(time, l.t, l.r));
           }
+          const item = hw[hwKey(date, n)];
+          if (item) body.append(h('div', 'hw-text', item.text));
+          row.onclick = () => openHw(date, n);
           if (isToday && st.lesson === n) row.classList.add('now');
           else if (isToday && now.min >= BELLS[n][1]) row.classList.add('past');
         }
@@ -572,7 +707,7 @@
   }
 
   // ---------- вкладки ----------
-  const TABS = ['desks', 'week', 'bells'];
+  const TABS = ['desks', 'week', 'hw', 'bells'];
   function showTab(name) {
     if (!TABS.includes(name)) name = 'desks';
     for (const t of TABS) {

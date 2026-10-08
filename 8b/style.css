@@ -184,7 +184,9 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   top: env(safe-area-inset-top, 0px);
   z-index: 20;
   display: flex;
-  gap: 4px;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
   margin: 22px calc(var(--gutter) * -1) 0;
   padding: 8px var(--gutter);
   background: color-mix(in srgb, var(--paper) 88%, transparent);
@@ -195,16 +197,17 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tabs button {
   position: relative;
   flex: 0 0 auto;
-  padding: 10px 14px 12px;
+  padding: 10px clamp(7px, 2.2vw, 14px) 12px;
   border: 0;
   background: none;
-  font: 500 15px/1 var(--f-display);
+  font: 500 clamp(12.5px, 3.5vw, 15px)/1 var(--f-display);
+  white-space: nowrap;
   color: var(--muted);
   border-radius: 8px;
 }
 .tabs button[aria-selected="true"] { color: var(--fg); }
 .tabs button[aria-selected="true"]::after {
-  content: ''; position: absolute; left: 14px; right: 14px; bottom: 2px; height: 3px;
+  content: ''; position: absolute; left: clamp(7px, 2.2vw, 14px); right: clamp(7px, 2.2vw, 14px); bottom: 2px; height: 3px;
   background: var(--red); border-radius: 2px;
 }
 
@@ -341,6 +344,27 @@ main { padding-top: 22px; }
 .lesson.now .n { color: var(--red); }
 .lesson.past { opacity: 0.55; }
 
+/* ---------- домашка ---------- */
+.hw-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.hw-item {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 4px 10px;
+  width: 100%; padding: 13px 2px; border: 0; border-bottom: 1px solid var(--line);
+  background: none; text-align: left;
+}
+.hw-item .n { font: 700 18px/1.15 var(--f-display); color: var(--muted); }
+.hw-item .body { display: grid; gap: 4px; min-width: 0; }
+.hw-item .subj { font-weight: 600; font-size: 15.5px; line-height: 1.25; }
+.hw-text { font: 700 21px/1.15 var(--f-hand); color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
+.hw-by { font-size: 12px; color: var(--muted); }
+.hw-add { font-size: 13.5px; color: var(--muted); }
+.hw-add::before { content: '+ '; }
+@media (hover: hover) { .hw-item:hover .hw-add { color: var(--ink); } }
+.hw-note { margin: 0; font-size: 13.5px; max-width: 62ch; }
+.lesson:not(.empty) { cursor: pointer; }
+.lesson .hw-text { font-size: 18px; margin-top: 2px; }
+.seg.has-hw::after { content: ''; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--ink); }
+.seg.cur.has-hw::after { background: var(--red); }
+
 /* ---------- дзвінки ---------- */
 .bells { list-style: none; margin: 0; padding: 0; max-width: 620px; display: grid; }
 .bell {
@@ -384,13 +408,19 @@ main { padding-top: 22px; }
 .sheet-title { margin: 0; font: 700 24px/1.15 var(--f-display); letter-spacing: -0.01em; }
 .sheet-text { margin: 0 0 6px; color: var(--muted); }
 .sheet-text b { color: var(--fg); }
-#sheet-form { display: grid; gap: 14px; }
+#sheet-form, #hw-form { display: grid; gap: 14px; }
 .field { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 .field input {
   width: 100%; padding: 13px 14px; font-size: 22px; font-family: var(--f-hand); font-weight: 700; color: var(--ink);
   background: var(--paper); border: 1.5px solid var(--line-strong); border-radius: 10px;
 }
-.field input:focus { outline: none; border-color: var(--ink); }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--ink); }
+.field textarea {
+  width: 100%; padding: 12px 14px; resize: vertical; min-height: 110px;
+  font: 700 21px/1.2 var(--f-hand); color: var(--ink);
+  background: var(--paper); border: 1.5px solid var(--line-strong); border-radius: 10px;
+}
+.link-btn { justify-self: center; border: 0; background: none; padding: 6px 10px; color: var(--red); font-size: 14px; font-weight: 500; }
 .sheet-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
 .btn { padding: 14px 16px; border-radius: 12px; border: 1.5px solid transparent; font-weight: 600; font-size: 16px; }
 .btn.primary { background: var(--fg); color: var(--paper); }

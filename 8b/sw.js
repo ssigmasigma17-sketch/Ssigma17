@@ -1,5 +1,5 @@
 // Сайт відкривається і без інтернету: сторінка з кешу, шрифти з кешу. Броні (/api) завжди з мережі.
-const VERSION = '8b-v1';
+const VERSION = '8b-v2';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'data.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', e => {

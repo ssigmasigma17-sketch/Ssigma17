@@ -65,6 +65,7 @@
 <nav class="tabs" role="tablist" aria-label="Розділи">
   <button role="tab" id="tab-desks" data-tab="desks" aria-selected="true">Парти</button>
   <button role="tab" id="tab-week" data-tab="week" aria-selected="false">Розклад</button>
+  <button role="tab" id="tab-hw" data-tab="hw" aria-selected="false">Домашка</button>
   <button role="tab" id="tab-bells" data-tab="bells" aria-selected="false">Дзвінки</button>
 </nav>
 
@@ -108,6 +109,20 @@
     <div class="week" id="week"></div>
   </section>
 
+  <!-- Домашка -->
+  <section class="panel" id="panel-hw" role="tabpanel" aria-labelledby="tab-hw" hidden>
+    <div class="days" id="hw-days" role="radiogroup" aria-label="День"></div>
+    <div class="room-head">
+      <div>
+        <div class="eyebrow">Домашнє завдання</div>
+        <div class="room-day" id="hw-day"></div>
+      </div>
+      <div class="tally" id="hw-tally"></div>
+    </div>
+    <ol class="hw-list" id="hw-list"></ol>
+    <p class="muted hw-note">Записати може будь-хто з класу: торкнись уроку. Видно, хто і коли записав.</p>
+  </section>
+
   <!-- Дзвінки -->
   <section class="panel" id="panel-bells" role="tabpanel" aria-labelledby="tab-bells" hidden>
     <ol class="bells" id="bells"></ol>
@@ -143,6 +158,30 @@
     <button type="button" class="btn danger" id="sheet-release">Звільнити місце</button>
   </div>
   <p class="sheet-error" id="sheet-error" role="alert"></p>
+</div>
+
+<!-- Аркуш домашки -->
+<div class="sheet" id="hw-sheet" role="dialog" aria-modal="true" aria-labelledby="hw-title" hidden>
+  <div class="sheet-grip"></div>
+  <div class="sheet-eyebrow" id="hw-eyebrow"></div>
+  <h3 class="sheet-title" id="hw-title"></h3>
+  <p class="sheet-text" id="hw-meta"></p>
+  <form id="hw-form" autocomplete="off">
+    <label class="field" for="hw-text">
+      <span>Що задали</span>
+      <textarea id="hw-text" rows="4" maxlength="600" placeholder="Наприклад: §12, № 340–344"></textarea>
+    </label>
+    <label class="field" for="hw-name" id="hw-name-field">
+      <span>Твоє імʼя</span>
+      <input id="hw-name" maxlength="32" placeholder="Щоб було видно, хто записав">
+    </label>
+    <div class="sheet-actions">
+      <button type="button" class="btn ghost" id="hw-cancel">Закрити</button>
+      <button type="submit" class="btn primary" id="hw-save">Зберегти</button>
+    </div>
+    <button type="button" class="link-btn" id="hw-clear" hidden>Стерти запис</button>
+  </form>
+  <p class="sheet-error" id="hw-error" role="alert"></p>
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>
