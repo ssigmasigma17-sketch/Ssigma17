@@ -100,18 +100,82 @@
         }
       }
     }
-    const nd = nextSchoolDay(now.date), NL = lessonsOf(dowOf(nd)), { first, count } = span(NL);
+    const nd = nextSchoolDay(now.date), NL = lessonsOf(dowOf(nd)), { first } = span(NL);
     const when = nd === addDays(now.date, 1) ? 'завтра' : DOW_ON[dowOf(nd)];
+    const left = (utc(nd) - utc(now.date)) / 864e5 * 1440 + BELLS[first][0] - now.min;
     return {
       key: 'off', label: L ? 'Уроки закінчились' : 'Вихідний',
-      title: `${cap(when)} перший — ${subjOf(NL[first])}`, count: fmt(BELLS[first][0]),
-      sub: `${cap(when)} ${count} ${plural(count, 'урок', 'уроки', 'уроків')}, каб. ${roomOf(NL[first])}`,
+      title: `${cap(when)} перший — ${subjOf(NL[first])}`,
+      // менше доби — зворотний відлік, інакше просто час
+      count: left < 1440 ? countdown(left) : fmt(BELLS[first][0]),
+      sub: '',
     };
   }
   const cap = s => s[0].toUpperCase() + s.slice(1);
   function plural(n, one, few, many) {
     const a = n % 10, b = n % 100;
     return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
+  }
+
+  // ---------- смуга дня ----------
+  const SHORT = {
+    'Англійська мова': 'Англ', 'Українська мова': 'Укр', 'Українська література': 'Укр л', 'Зарубіжна література': 'Зар л',
+    'Фізкультура': 'Фізра', 'Інформатика': 'Інф', 'Геометрія': 'Геом', 'Алгебра': 'Алг', 'Історія': 'Іст', 'Біологія': 'Біо',
+    'Географія': 'Геогр', 'Хімія': 'Хім', 'Фізика': 'Фіз', 'Технології': 'Техн', 'Світ професій': 'Проф', 'ІК «Мистецтво»': 'Мист',
+  };
+  const shortOf = l => (l.s ? SHORT[l.s] || l.s.slice(0, 4) : 'A / B');
+  const dur = m => {
+    m = Math.max(0, Math.ceil(m));
+    const d = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60), mm = m % 60;
+    return d ? `${d} дн ${hh} год` : hh ? `${hh} год ${mm} хв` : `${mm} хв`;
+  };
+  // день, який показує смуга: сьогодні, поки йдуть уроки, інакше наступний навчальний
+  const stripDay = now => (dayOver(now) ? nextSchoolDay(now.date) : now.date);
+  let strip = null;
+
+  function renderStrip(now) {
+    const date = stripDay(now), L = lessonsOf(dowOf(date)), { first, last, count } = span(L);
+    const t0 = BELLS[first][0], t1 = BELLS[last][1], pct = m => `${((m - t0) / (t1 - t0)) * 100}%`;
+    const when = date === now.date ? 'Сьогодні' : date === addDays(now.date, 1) ? 'Завтра' : cap(DOW[dowOf(date)]);
+    $('strip-title').textContent = `${when} · ${count} ${plural(count, 'урок', 'уроки', 'уроків')}`;
+    $('strip-from').textContent = fmt(t0);
+    $('strip-to').textContent = fmt(t1);
+    const track = $('strip-track');
+    track.textContent = '';
+    const segs = [];
+    L.forEach((l, i) => {
+      if (!l) return;
+      const [a, b] = BELLS[i], seg = h('span', 'seg');
+      seg.style.left = pct(a);
+      seg.style.width = pct(t0 + (b - a));
+      seg.append(h('b', '', i + 1), h('i', '', shortOf(l)));
+      seg.title = `${i + 1}. ${subjOf(l)}, ${fmt(a)}–${fmt(b)}`;
+      track.append(seg);
+      segs.push({ seg, a, b });
+    });
+    const mark = h('span', 'mark');
+    track.append(mark);
+    strip = { date, t0, t1, segs, mark };
+  }
+
+  function updateStrip(now) {
+    if (!strip || strip.date !== stripDay(now)) renderStrip(now);
+    const { date, t0, t1, segs, mark } = strip, today = date === now.date;
+    for (const { seg, a, b } of segs) {
+      seg.classList.toggle('past', today && now.min >= b);
+      seg.classList.toggle('cur', today && now.min >= a && now.min < b);
+    }
+    mark.hidden = !today || now.min < t0 || now.min > t1;
+    mark.style.left = `${((now.min - t0) / (t1 - t0)) * 100}%`;
+    $('strip-left').textContent = !today ? `початок о ${fmt(t0)}` : now.min < t0 ? `початок через ${dur(t0 - now.min)}` : `до кінця ${dur(t1 - now.min)}`;
+    $('strip-weekend').textContent = weekendText(now);
+  }
+
+  function weekendText(now) {
+    if (now.dow < 1 || now.dow > 5) return 'вихідні';
+    const fridayEnd = BELLS[span(C.week[4]).last][1];
+    const left = (5 - now.dow) * 1440 + fridayEnd - now.min;
+    return left > 0 ? `до вихідних ${dur(left)}` : 'вихідні';
   }
 
   // ---------- шапка ----------
@@ -131,6 +195,8 @@
       $('ruler').querySelector('.ruler-ticks').style.setProperty('--mins', st.ruler[0]);
       $('ruler-fill').style.width = `${Math.min(100, (st.ruler[1] / st.ruler[0]) * 100)}%`;
     }
+    document.title = st.key === 'off' ? '8-Б' : `${st.count} · 8-Б`;
+    updateStrip(now);
     const key = `${now.date}|${st.key}`;
     if (key !== lastKey) {
       const dayChanged = lastKey.split('|')[0] !== now.date;
@@ -360,6 +426,7 @@
       const r = await api.book(date, seat, name);
       data[date] = r.day;
       popSeat = seat;
+      buzz([12, 50, 18]);
       closeSheet();
       renderDays();
       renderRoom();
@@ -379,6 +446,7 @@
     try {
       const r = await api.release(date);
       data[date] = r.day;
+      buzz(10);
       closeSheet();
       renderDays();
       renderRoom();
@@ -391,6 +459,8 @@
   });
   for (const id of ['sheet-cancel', 'sheet-close', 'scrim']) $(id).addEventListener('click', closeSheet);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+
+  const buzz = p => { try { navigator.vibrate?.(p); } catch {} };
 
   let toastTimer;
   function toast(text) {
@@ -515,7 +585,75 @@
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
+  // ---------- свайп між днями ----------
+  function onSwipe(el, fn) {
+    let x0 = null, y0 = 0;
+    el.addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (x0 == null) return;
+      const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      x0 = null;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy)) fn(dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
+  function slide(el, dir) {
+    el.classList.remove('slide-next', 'slide-prev');
+    void el.offsetWidth;
+    el.classList.add(dir > 0 ? 'slide-next' : 'slide-prev');
+  }
+  onSwipe($('room'), dir => {
+    const i = bookDates.indexOf(selDate) + dir;
+    if (i < 0 || i >= bookDates.length) return;
+    selDate = bookDates[i];
+    renderDays();
+    renderRoom();
+    slide($('room'), dir);
+  });
+  onSwipe($('week'), dir => {
+    if (innerWidth >= 900) return;
+    const now = kyivNow(), dates = weekDates(now), i = dates.indexOf(weekSel) + dir;
+    if (i < 0 || i >= dates.length) return;
+    weekSel = dates[i];
+    renderWeek(now, status(now));
+    slide($('week'), dir);
+  });
+
+  // ---------- тема і посилання ----------
+  const THEMES = { auto: 'як у телефоні', light: 'світла', dark: 'темна' };
+  function applyTheme(mode) {
+    const root = document.documentElement;
+    if (mode === 'auto') delete root.dataset.theme;
+    else root.dataset.theme = mode;
+    $('theme').dataset.mode = mode;
+    $('theme').setAttribute('aria-label', `Тема: ${THEMES[mode]}`);
+    const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+      m.content = mode === 'auto' ? (m.media.includes('dark') ? '#16201c' : '#f5f8fc') : paper;
+    }
+  }
+  $('theme').addEventListener('click', () => {
+    const keys = Object.keys(THEMES), mode = keys[(keys.indexOf($('theme').dataset.mode) + 1) % keys.length];
+    applyTheme(mode);
+    store.set('theme', mode);
+    toast(`Тема: ${THEMES[mode]}`);
+  });
+  $('share').addEventListener('click', async () => {
+    const url = location.href.split('#')[0];
+    try {
+      if (navigator.share) { await navigator.share({ title: '8-Б', text: 'Парти, розклад і дзвінки 8-Б', url }); return; }
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+    try { await navigator.clipboard.writeText(url); toast('Посилання скопійовано'); } catch { toast(url); }
+  });
+  $('strip').addEventListener('click', () => {
+    showTab('week');
+    document.querySelector('.tabs').scrollIntoView({ behavior: 'smooth' });
+  });
+
   // ---------- старт ----------
+  document.documentElement.classList.add('intro');
+  applyTheme(store.get('theme', 'auto'));
   $('year').textContent = C.year;
   $('rules').append(...C.rules.map(r => h('li', '', r)));
   showTab(location.hash.slice(1) || store.get('tab', 'desks'));
@@ -523,4 +661,6 @@
   setInterval(tick, 1000);
   setInterval(() => { if (!document.hidden && api === server) refresh(); }, 10000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  // офлайн і встановлення на телефон (sw.js); у вбудованому перегляді просто не спрацює
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

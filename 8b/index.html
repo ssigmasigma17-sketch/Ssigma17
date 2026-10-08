@@ -7,6 +7,12 @@
 <meta name="description" content="Бронювання парт, розклад уроків і дзвінків 8-Б">
 <meta name="theme-color" content="#f5f8fc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16201c" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="8-Б">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=JetBrains+Mono:wght@400;600&family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;700;900&display=swap">
@@ -17,8 +23,16 @@
 
 <header class="hero">
   <div class="hero-top">
-    <h1 class="klass" aria-label="Клас 8-Б">8<span class="dash">-</span>Б</h1>
+    <h1 class="klass" aria-label="Клас 8-Б"><span class="ch">8</span><span class="dash">-</span><span class="ch">Б</span></h1>
     <div class="hero-date">
+      <div class="tools">
+        <button type="button" class="icon-btn" id="share" aria-label="Поділитися посиланням">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+        </button>
+        <button type="button" class="icon-btn" id="theme" aria-label="Тема: як у телефоні">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="half" d="M12 3.5a8.5 8.5 0 0 1 0 17z"/></svg>
+        </button>
+      </div>
       <span id="today-dow" class="dow"></span>
       <span id="today-date" class="date"></span>
       <span id="clock" class="clock mono"></span>
@@ -37,6 +51,15 @@
       <div class="ruler-ticks"></div>
     </div>
   </section>
+
+  <button type="button" class="strip" id="strip" aria-label="Відкрити розклад">
+    <span class="strip-head">
+      <span class="strip-title" id="strip-title"></span>
+      <span class="strip-left mono" id="strip-left"></span>
+    </span>
+    <span class="strip-track" id="strip-track"></span>
+    <span class="strip-axis mono"><span id="strip-from"></span><span id="strip-weekend" class="strip-weekend"></span><span id="strip-to"></span></span>
+  </button>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Розділи">
@@ -70,7 +93,7 @@
     </div>
 
     <div class="demo" id="demo" hidden>
-      Демо: сервер не підключено, тому броні зберігаються лише на цьому пристрої.
+      Поки що броні зберігаються лише на цьому телефоні: спільний сервер ще не підключено.
     </div>
 
     <section class="rules">

@@ -80,7 +80,26 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   color: var(--ink);
   margin-left: -0.04em;
 }
-.klass .dash { color: var(--red); letter-spacing: -0.1em; margin-right: 0.04em; }
+.klass .dash { color: var(--red); letter-spacing: -0.1em; margin-right: 0.04em; display: inline-block; }
+.klass .ch { display: inline-block; }
+.intro .klass .ch { animation: ink-in 0.7s cubic-bezier(.2, .8, .2, 1) both; }
+.intro .klass .ch:last-child { animation-delay: 0.12s; }
+.intro .klass .dash { animation: dash-in 0.45s 0.38s cubic-bezier(.3, 1.4, .5, 1) both; transform-origin: left center; }
+@keyframes ink-in { from { transform: translateY(0.35em); opacity: 0; clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes dash-in { from { transform: scaleX(0); } }
+
+.tools { display: flex; gap: 6px; margin-bottom: 10px; }
+.icon-btn {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border: 1.5px solid var(--line-strong); border-radius: 50%;
+  background: var(--surface); color: var(--fg);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.icon-btn:active { transform: scale(0.9); }
+.icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn .half { fill: currentColor; stroke: none; }
+#theme[data-mode="light"] .half { fill: none; }
+#theme[data-mode="dark"] circle { fill: currentColor; }
 .hero-date { display: grid; justify-items: end; gap: 2px; padding-bottom: 6px; text-align: right; }
 .dow { font: 700 13px/1 var(--f-display); text-transform: uppercase; letter-spacing: 0.08em; color: var(--red); }
 .date { font-weight: 600; font-size: 17px; }
@@ -100,6 +119,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .now-count { font-size: clamp(26px, 7vw, 40px); font-weight: 600; color: var(--red); white-space: nowrap; }
 .now-sub { color: var(--muted); font-size: 15px; }
 .now-sub b { color: var(--fg); font-weight: 600; }
+.now-sub:empty { display: none; }
 
 /* лінійка замість прогрес-бару: поділка — хвилина */
 .ruler {
@@ -125,6 +145,38 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
     repeating-linear-gradient(90deg, var(--fg) 0 1px, transparent 1px var(--step)) 0 0 / 100% 7px no-repeat;
   opacity: 0.75;
 }
+
+/* смуга дня: уроки в масштабі часу */
+.strip {
+  display: grid; gap: 8px; width: 100%;
+  margin-top: 24px; padding: 0;
+  border: 0; background: none; text-align: left;
+}
+.strip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.strip-title { font: 700 11.5px/1.2 var(--f-display); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.strip-left { font-size: 12.5px; color: var(--muted); }
+.strip-track { position: relative; display: block; height: 46px; }
+.seg {
+  position: absolute; top: 0; bottom: 0;
+  display: grid; align-content: center; justify-items: center; gap: 2px;
+  border: 1.5px solid var(--fg); border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.seg b { font: 700 13px/1 var(--f-display); }
+.seg i { font: 500 9.5px/1 var(--f-body); font-style: normal; color: var(--muted); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: clip; padding: 0 1px; }
+.seg.past { border-color: var(--line-strong); background: transparent; color: var(--muted); }
+.seg.past b { font-weight: 500; }
+.seg.cur { border-color: var(--red); background: color-mix(in srgb, var(--red) 14%, var(--surface)); color: var(--red); }
+.seg.cur i { color: var(--red); }
+.mark {
+  position: absolute; top: -6px; bottom: -6px; width: 2px; margin-left: -1px;
+  background: var(--red); border-radius: 1px; z-index: 2;
+  transition: left 1s linear;
+}
+.mark::before { content: ''; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+.strip-axis { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--muted); }
+.strip-weekend { color: var(--ink); font-weight: 600; text-align: center; }
 
 /* ---------- вкладки ---------- */
 .tabs {
@@ -307,6 +359,11 @@ main { padding-top: 22px; }
 .brk.big { padding-block: 14px; }
 .brk.now { color: var(--red); }
 .brk.now::before { content: ''; position: absolute; left: 4px; top: 50%; width: 40px; height: 2px; background: var(--red); }
+
+.slide-next { animation: slide-next 0.28s cubic-bezier(.2, .8, .3, 1) both; }
+.slide-prev { animation: slide-prev 0.28s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes slide-next { from { transform: translateX(28px); opacity: 0.3; } }
+@keyframes slide-prev { from { transform: translateX(-28px); opacity: 0.3; } }
 
 /* ---------- аркуш ---------- */
 .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(8, 12, 24, 0.42); animation: fade 0.2s ease both; }
