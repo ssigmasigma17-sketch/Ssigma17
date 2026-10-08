@@ -249,6 +249,7 @@
     deletePoll: id => server.req('/api/polls/delete', { id }),
     sendChat: (text, name) => server.req('/api/chat', { text, name }),
     deleteChat: id => server.req('/api/chat/delete', { id }),
+    react: (id, emoji) => server.req('/api/chat/react', { id, emoji }),
     adminCheck: () => server.req('/api/admin'),
     adminRelease: (date, seat) => server.req('/api/admin/release', { date, seat }),
     hwHistoryClear: (date, lesson) => server.req('/api/admin/hw-history-clear', { date, lesson }),
@@ -326,6 +327,7 @@
       return { ok: true };
     },
     async adminCheck() { return { admin: false }; },
+    async react() { return { ok: true }; },
     async createPoll(q, options, name) {
       const all = store.get('demo-polls', []);
       all.unshift({ id: Date.now(), q, options, by: name, at: Date.now(), mine: null });
@@ -412,13 +414,28 @@
     renderRoom();
     renderHwAll();
     renderPolls();
+    renderDigest();
   }
 
   // ---------- домашка ----------
   const hwKey = (date, n) => `${date}|${n + 1}`;
+  // «зроблено» — особисті позначки, лише на цьому пристрої
+  let done = new Set(store.get('done', []));
+  const isDone = key => done.has(key);
+  function toggleDone(key) {
+    if (done.has(key)) done.delete(key);
+    else done.add(key);
+    store.set('done', [...done].slice(-300));
+    buzz(8);
+    renderHwAll();
+  }
   const hwCount = date => {
     const L = lessonsOf(dowOf(date));
     return L ? L.filter((l, n) => l && hw[hwKey(date, n)]).length : 0;
+  };
+  const doneCount = date => {
+    const L = lessonsOf(dowOf(date));
+    return L ? L.filter((l, n) => l && hw[hwKey(date, n)] && done.has(hwKey(date, n))).length : 0;
   };
   const ago = at => {
     const t = new Date(at), today = kyivNow().date;
@@ -430,6 +447,7 @@
 
   function renderHwAll() {
     renderHwPanel();
+    renderDigest();
     const now = kyivNow();
     renderWeek(now, status(now));
     strip = null;
@@ -455,9 +473,9 @@
       b.onclick = () => { hwSel = d; renderHwPanel(); };
       chips.append(b);
     }
-    const L = lessonsOf(dowOf(hwSel)), n = hwCount(hwSel), total = span(L).count;
+    const L = lessonsOf(dowOf(hwSel)), n = hwCount(hwSel), total = span(L).count, dn = doneCount(hwSel);
     $('hw-day').textContent = `${cap(DOW[dowOf(hwSel)])}, ${longDate(hwSel)}`;
-    $('hw-tally').innerHTML = `<b>${n}</b>записано з ${total}`;
+    $('hw-tally').innerHTML = n && dn ? `<b>${dn}/${n}</b>зроблено` : `<b>${n}</b>записано з ${total}`;
     const list = $('hw-list');
     list.textContent = '';
     L.forEach((l, i) => {
@@ -471,7 +489,20 @@
       else body.append(h('span', 'hw-add', 'записати'));
       btn.append(h('span', 'n', i + 1), body);
       btn.onclick = () => openHw(hwSel, i);
+      li.className = 'hw-li';
       li.append(btn);
+      if (item) {
+        const key = hwKey(hwSel, i), on = isDone(key);
+        li.classList.toggle('done', on);
+        const chk = h('button', `hw-check${on ? ' on' : ''}`);
+        chk.type = 'button';
+        chk.setAttribute('role', 'checkbox');
+        chk.setAttribute('aria-checked', String(on));
+        chk.setAttribute('aria-label', `${subjOf(l)}: зроблено`);
+        chk.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+        chk.onclick = () => toggleDone(key);
+        li.append(chk);
+      }
       list.append(li);
     });
   }
@@ -604,6 +635,7 @@
       const f = seatName(fav);
       $('fav-btn').innerHTML = `<span>Сісти за свою звичну парту</span><b>ряд ${f.r}, парта ${f.d}</b>`;
     }
+    $('room').classList.toggle('loading', !lastSync && api === server && $('demo').hidden);
     const rows = $('rows');
     rows.style.setProperty('--rows', C.rows);
     rows.textContent = '';
@@ -752,6 +784,7 @@
       closeSheet();
       renderDays();
       renderRoom();
+      renderDigest();
       toast(`Парта твоя ${DOW_ON[dowOf(date)]}, ${longDate(date)}`);
       return null;
     } catch (err) {
@@ -810,7 +843,7 @@
     const key = JSON.stringify(polls) + isAdmin;
     if (key === pollsKey) return;
     pollsKey = key;
-    const box = $('polls');
+    const box = $('polls-list');
     box.textContent = '';
     if (!polls.length) {
       box.append(h('p', 'polls-empty', 'Поки опитувань немає. Створи перше — наприклад, куди йдемо після уроків.'));
@@ -922,8 +955,42 @@
     }
   });
 
+  // ---------- зведення під шапкою ----------
+  function renderDigest() {
+    if (!bookDates.length) return;
+    const now = kyivNow();
+    // парта: сьогоднішня, поки йдуть уроки й вона є, інакше на день, який можна бронювати
+    const today = now.date, next = bookDates[bookDates.length - 1];
+    const deskDay = data[today]?.mine && !dayOver(now) ? today : next;
+    const mine = data[deskDay]?.mine;
+    const short = d => (d === today ? 'сьогодні' : d === addDays(today, 1) ? 'завтра' : DOW_S[dowOf(d)]);
+    $('dg-desk-k').textContent = `Парта ${deskDay === today ? 'сьогодні' : 'на ' + short(deskDay)}`;
+    $('dg-desk-v').textContent = mine ? `ряд ${seatName(mine).r} · ${seatName(mine).d}` : bookable(deskDay) ? 'забронюй' : 'немає';
+    $('dg-desk').classList.toggle('cta', !mine && bookable(deskDay));
+    $('dg-desk').onclick = () => { selDate = deskDay; renderDays(); renderRoom(); goTab('desks'); };
+    // домашка на найближчий день
+    const hd = hwDates[0];
+    if (hd) {
+      const n = hwCount(hd), dn = doneCount(hd);
+      $('dg-hw-k').textContent = `Д/з ${hd === today ? 'на сьогодні' : 'на ' + short(hd)}`;
+      $('dg-hw-v').textContent = !n ? 'нічого' : dn ? `${dn} з ${n} ✓` : `${n} ${plural(n, 'предмет', 'предмети', 'предметів')}`;
+      $('dg-hw').classList.toggle('ok', n > 0 && dn === n);
+      $('dg-hw').onclick = () => { hwSel = hd; renderHwPanel(); goTab('hw'); };
+    }
+    // чат
+    const seen = store.get('chatSeen', 0), fresh = chatMsgs.filter(m => m.id > seen && !m.own).length;
+    $('dg-chat-v').textContent = fresh ? `${fresh} ${plural(fresh, 'нове', 'нових', 'нових')}` : chatMsgs.length ? 'прочитано' : 'тихо';
+    $('dg-chat').classList.toggle('hot', fresh > 0);
+    $('dg-chat').onclick = () => { showCView('chat'); goTab('chat'); };
+  }
+  function goTab(name) {
+    showTab(name);
+    $('main').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   // ---------- чат ----------
-  let chatMsgs = [], chatLast = 0, chatRev = 0;
+  let chatMsgs = [], chatLast = 0, chatRev = 0, pickFor = null;
+  const EMOJI = ['👍', '😂', '❤️', '🔥'];
   function mergeChat(c) {
     if (!c) return;
     const before = chatLast;
@@ -938,12 +1005,13 @@
     if (chatOpen()) store.set('chatSeen', chatLast);
     const seen = store.get('chatSeen', 0);
     $('unread').hidden = !chatMsgs.some(m => m.id > seen && !m.own);
+    renderDigest();
   }
   const hm = at => new Date(at).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' });
   const kyivDate = at => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date(at));
 
   function renderChat() {
-    const box = $('chat');
+    const box = $('chat-list');
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     box.textContent = '';
     if (!chatMsgs.length) {
@@ -967,6 +1035,12 @@
       }
       const bubble = h('div', 'bubble');
       bubble.append(h('span', 'msg-text', m.text));
+      // торкнутись повідомлення — відкрити реакції
+      bubble.onclick = e => {
+        if (e.target.closest('.msg-del')) return;
+        pickFor = pickFor === m.id ? null : m.id;
+        renderChat();
+      };
       if (m.own || isAdmin) {
         const del = h('button', 'msg-del', '×');
         del.type = 'button';
@@ -975,10 +1049,41 @@
         bubble.append(del);
       }
       el.append(bubble);
+      const re = Object.entries(m.re || {}).filter(([, v]) => v.n > 0);
+      if (re.length || pickFor === m.id) {
+        const row = h('div', 're-row');
+        for (const [emo, v] of re) {
+          const pill = h('button', `re-pill${v.mine ? ' mine' : ''}`, `${emo} ${v.n}`);
+          pill.type = 'button';
+          pill.onclick = () => react(m.id, emo);
+          row.append(pill);
+        }
+        if (pickFor === m.id) {
+          for (const emo of EMOJI) {
+            const b = h('button', 're-pick', emo);
+            b.type = 'button';
+            b.setAttribute('aria-label', `Реакція ${emo}`);
+            b.onclick = () => react(m.id, emo);
+            row.append(b);
+          }
+        }
+        el.append(row);
+      }
       box.append(el);
       prev = m;
     }
     if (nearBottom || chatMsgs[chatMsgs.length - 1]?.own) box.scrollTop = box.scrollHeight;
+  }
+
+  async function react(id, emoji) {
+    pickFor = null;
+    try {
+      await api.react(id, emoji);
+      buzz(6);
+      await refresh();
+    } catch (e) {
+      toast(e.code === 'slow' ? SLOW : 'Не вдалося поставити реакцію.');
+    }
   }
 
   async function deleteMsg(m, btn) {
@@ -1029,7 +1134,7 @@
       $('chat-text').value = '';
       chatResize();
       await refresh();
-      $('chat').scrollTop = $('chat').scrollHeight;
+      $('chat-list').scrollTop = $('chat-list').scrollHeight;
     } catch (err) {
       toast(err.code === 'slow' ? 'Забагато повідомлень. Зачекай хвилину.' : 'Не вдалося надіслати. Перевір інтернет.');
     } finally {
@@ -1112,7 +1217,7 @@
     if (!weekSel || !dates.includes(weekSel)) weekSel = dates.includes(now.date) ? now.date : dates[0];
     const chips = $('week-days');
     chips.textContent = '';
-    const box = $('week');
+    const box = $('week-grid');
     box.textContent = '';
     dates.forEach((date, i) => {
       const isToday = date === now.date;
@@ -1156,7 +1261,7 @@
             body.append(meta(time, l.t, l.r));
           }
           const item = hw[hwKey(date, n)];
-          if (item) body.append(h('div', 'hw-text', item.text));
+          if (item) body.append(h('div', `hw-text${isDone(hwKey(date, n)) ? ' is-done' : ''}`, item.text));
           row.onclick = () => openHw(date, n);
           if (isToday && st.lesson === n) row.classList.add('now');
           else if (isToday && now.min >= BELLS[n][1]) row.classList.add('past');
@@ -1178,7 +1283,7 @@
   // ---------- дзвінки ----------
   function renderBells(now, st) {
     const used = Math.max(...C.week.map(L => span(L).last)) + 1;
-    const box = $('bells');
+    const box = $('bells-list');
     box.textContent = '';
     const school = !!lessonsOf(now.dow);
     BELLS.forEach(([a, b], i) => {
@@ -1209,7 +1314,7 @@
     $('cview-chat').hidden = v !== 'chat';
     $('cview-polls').hidden = v !== 'polls';
     store.set('cview', v);
-    if (chatOpen()) { updateUnread(); $('chat').scrollTop = $('chat').scrollHeight; refresh(); schedule(); }
+    if (chatOpen()) { updateUnread(); $('chat-list').scrollTop = $('chat-list').scrollHeight; refresh(); schedule(); }
   }
   document.querySelectorAll('#chat-seg button').forEach(b => b.addEventListener('click', () => showCView(b.dataset.cview)));
   function showView(view) {
@@ -1231,7 +1336,7 @@
     currentTab = name;
     store.set('tab', name);
     if (location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
-    if (chatOpen()) { updateUnread(); $('chat').scrollTop = $('chat').scrollHeight; refresh(); schedule(); }
+    if (chatOpen()) { updateUnread(); $('chat-list').scrollTop = $('chat-list').scrollHeight; refresh(); schedule(); }
   }
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
@@ -1260,13 +1365,13 @@
     renderRoom();
     slide($('room'), dir);
   });
-  onSwipe($('week'), dir => {
-    if (innerWidth >= 900) return;
+  onSwipe($('week-grid'), dir => {
+    if (!matchMedia('(max-width: 899px), (min-width: 1000px) and (max-width: 1299px)').matches) return;
     const now = kyivNow(), dates = weekDates(now), i = dates.indexOf(weekSel) + dir;
     if (i < 0 || i >= dates.length) return;
     weekSel = dates[i];
     renderWeek(now, status(now));
-    slide($('week'), dir);
+    slide($('week-grid'), dir);
   });
 
   // ---------- тема і посилання ----------
@@ -1297,10 +1402,7 @@
     }
     try { await navigator.clipboard.writeText(url); toast('Посилання скопійовано'); } catch { toast(url); }
   });
-  $('strip').addEventListener('click', () => {
-    showTab('week');
-    document.querySelector('.tabs').scrollIntoView({ behavior: 'smooth' });
-  });
+  $('strip').addEventListener('click', () => goTab('week'));
 
   // ---------- старт ----------
   document.documentElement.classList.add('intro');

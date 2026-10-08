@@ -68,16 +68,22 @@
     <span class="strip-track" id="strip-track"></span>
     <span class="strip-axis mono"><span id="strip-from"></span><span id="strip-weekend" class="strip-weekend"></span><span id="strip-to"></span></span>
   </button>
+
+  <div class="digest" id="digest">
+    <button type="button" class="dg" id="dg-desk"><span class="dg-k" id="dg-desk-k">Парта</span><span class="dg-v" id="dg-desk-v">…</span></button>
+    <button type="button" class="dg" id="dg-hw"><span class="dg-k" id="dg-hw-k">Домашка</span><span class="dg-v" id="dg-hw-v">…</span></button>
+    <button type="button" class="dg" id="dg-chat"><span class="dg-k">Чат</span><span class="dg-v" id="dg-chat-v">…</span></button>
+  </div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Розділи">
-  <button role="tab" id="tab-desks" data-tab="desks" aria-selected="true">Парти</button>
-  <button role="tab" id="tab-week" data-tab="week" aria-selected="false">Розклад</button>
-  <button role="tab" id="tab-hw" data-tab="hw" aria-selected="false">Домашка</button>
-  <button role="tab" id="tab-chat" data-tab="chat" aria-selected="false">Чат<i class="unread" id="unread" hidden></i></button>
+  <button role="tab" id="tab-desks" data-tab="desks" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="6" rx="1.5"/><path d="M6 13v6M18 13v6"/></svg><span>Парти</span></button>
+  <button role="tab" id="tab-week" data-tab="week" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Розклад</span></button>
+  <button role="tab" id="tab-hw" data-tab="hw" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h11a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6z"/><path d="M6 3.5v17M9.5 8h5.5M9.5 11.5h5.5"/></svg><span>Домашка</span></button>
+  <button role="tab" id="tab-chat" data-tab="chat" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v10H9.5L4 19.5z"/></svg><span>Чат</span><i class="unread" id="unread" hidden></i></button>
 </nav>
 
-<main>
+<main id="main">
   <!-- Парти -->
   <section class="panel" id="panel-desks" role="tabpanel" aria-labelledby="tab-desks">
     <div class="days" id="days" role="radiogroup" aria-label="День"></div>
@@ -122,10 +128,10 @@
     </div>
     <div id="view-lessons" class="view">
       <div class="days days-week" id="week-days" role="radiogroup" aria-label="День тижня"></div>
-      <div class="week" id="week"></div>
+      <div class="week" id="week-grid"></div>
     </div>
     <div id="view-bells" class="view" hidden>
-      <ol class="bells" id="bells"></ol>
+      <ol class="bells" id="bells-list"></ol>
     </div>
   </section>
 
@@ -151,7 +157,7 @@
     </div>
 
     <div id="cview-chat" class="view">
-      <div class="chat" id="chat" aria-live="polite">
+      <div class="chat" id="chat-list" aria-live="polite">
         <p class="chat-empty" id="chat-empty">Тут поки тихо. Напиши першим.</p>
       </div>
       <form class="chat-form" id="chat-form" autocomplete="off">
@@ -174,7 +180,7 @@
         </div>
         <button type="button" class="btn primary btn-small" id="poll-new">Нове опитування</button>
       </div>
-      <div class="polls" id="polls"></div>
+      <div class="polls" id="polls-list"></div>
       <p class="muted hw-note">Голосувати можна один раз, але відповідь можна змінити. Опитування зникає через 2 тижні.</p>
     </div>
   </section>
