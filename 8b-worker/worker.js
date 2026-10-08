@@ -9,7 +9,8 @@
 import { DurableObject } from 'cloudflare:workers';
 
 const ROWS = 3, DESKS = 5;
-const SEAT = new RegExp(`^[1-${ROWS}]-[1-${DESKS}]-[LR]$`);
+// бронюється вся парта: «ряд-парта»
+const SEAT = new RegExp(`^[1-${ROWS}]-[1-${DESKS}]$`);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // 5 навчальних днів наперед укладаються в 9 календарних (з вихідними посередині)
 const MAX_AHEAD_DAYS = 9;
@@ -57,6 +58,8 @@ export class Board extends DurableObject {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS homework (
       date TEXT NOT NULL, lesson INTEGER NOT NULL, text TEXT NOT NULL, by TEXT NOT NULL, owner TEXT NOT NULL, at INTEGER NOT NULL,
       PRIMARY KEY (date, lesson))`);
+    // колись бронювали окремі місця («1-2-L»); тепер — цілі парти
+    this.sql.exec("DELETE FROM bookings WHERE seat LIKE '%-L' OR seat LIKE '%-R'");
   }
 
   hw(from, to) {
