@@ -264,7 +264,7 @@ main { padding-top: 22px; }
 .row-name { font: 700 10.5px/1 var(--f-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; padding-top: 6px; }
 
 .desk {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 3px;
+  display: grid; grid-template-columns: 1fr; gap: 3px;
   padding: 3px;
   border-radius: 10px;
   background: var(--desk);
@@ -279,7 +279,7 @@ main { padding-top: 22px; }
   border-radius: 7px;
   background: var(--surface);
   display: grid; place-items: center;
-  font: 700 19px/1 var(--f-hand);
+  font: 700 23px/1 var(--f-hand);
   color: var(--ink);
   overflow: hidden;
   text-align: center;

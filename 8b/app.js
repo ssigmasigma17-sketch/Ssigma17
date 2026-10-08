@@ -209,11 +209,17 @@
   }
 
   // ---------- броні ----------
-  const SIDES = { L: 'ліве', R: 'праве' };
-  const seatName = id => { const [r, d, s] = id.split('-'); return { r, d, s, text: `ряд ${r}, парта ${d}, ${SIDES[s]} місце` }; };
+  // бронюється вся парта: id «ряд-парта»
+  const seatName = id => { const [r, d] = id.split('-'); return { r, d, text: `ряд ${r}, парта ${d}` }; };
   const seatIds = [];
-  for (let r = 1; r <= C.rows; r++) for (let d = 1; d <= C.desks; d++) for (const s of 'LR') seatIds.push(`${r}-${d}-${s}`);
+  for (let r = 1; r <= C.rows; r++) for (let d = 1; d <= C.desks; d++) seatIds.push(`${r}-${d}`);
   const TOTAL = seatIds.length;
+  // старі броні окремих місць («1-2-L») не показуємо
+  const cleanDay = day => {
+    const seats = {};
+    for (const id of seatIds) if (day.seats[id]) seats[id] = day.seats[id];
+    return { seats, mine: seatIds.includes(day.mine) ? day.mine : null };
+  };
 
   // Сервер: /api/days, /api/book, /api/release, /api/hw (src/worker.js). Якщо його немає — демо в localStorage.
   const server = {
@@ -238,12 +244,12 @@
   };
 
   const demo = {
-    all() { return store.get('demo-bookings-v2', {}); },
+    all() { return store.get('demo-bookings-v3', {}); },
     day(all, date) { return (all[date] ||= { seats: {}, mine: null }); },
     async days(dates) {
       const all = demo.all(), days = {};
       for (const d of dates) days[d] = demo.view(demo.day(all, d));
-      store.set('demo-bookings-v2', all);
+      store.set('demo-bookings-v3', all);
       return { days };
     },
     view(day) {
@@ -257,14 +263,14 @@
       if (day.mine) delete day.seats[day.mine];
       day.seats[seat] = { name };
       day.mine = seat;
-      store.set('demo-bookings-v2', all);
+      store.set('demo-bookings-v3', all);
       return { day: demo.view(day) };
     },
     async release(date) {
       const all = demo.all(), day = demo.day(all, date);
       if (day.mine) delete day.seats[day.mine];
       day.mine = null;
-      store.set('demo-bookings-v2', all);
+      store.set('demo-bookings-v3', all);
       return { day: demo.view(day) };
     },
     async hw(from, to) {
@@ -305,7 +311,7 @@
     try {
       const week = weekDates(kyivNow());
       const [r, w] = await Promise.all([api.days(bookDates), api.hw(week[0], addDays(week[0], 20))]);
-      data = r.days;
+      data = Object.fromEntries(Object.entries(r.days).map(([d, day]) => [d, cleanDay(day)]));
       hw = w.hw;
       if (!lastSync && C.api) $('demo').hidden = true;
       lastSync = Date.now();
@@ -457,7 +463,7 @@
       const n = data[d] ? Object.keys(data[d].seats).length : 0;
       fill.style.width = `${(n / TOTAL) * 100}%`;
       bar.append(fill);
-      b.append(bar, h('span', 'd-today', d === today ? 'сьогодні' : data[d]?.mine ? 'є місце' : ''));
+      b.append(bar, h('span', 'd-today', d === today ? 'сьогодні' : data[d]?.mine ? 'є парта' : ''));
       b.onclick = () => { selDate = d; renderDays(); renderRoom(); };
       box.append(b);
     }
@@ -475,7 +481,7 @@
       rows.append(h('div', 'desk-no', d));
       for (let r = 1; r <= C.rows; r++) {
         const desk = h('div', 'desk');
-        for (const s of 'LR') desk.append(seatButton(`${r}-${d}-${s}`, day));
+        desk.append(seatButton(`${r}-${d}`, day));
         rows.append(desk);
       }
     }
@@ -487,7 +493,7 @@
     sync.textContent = api === demo ? 'демо' : lastSync ? `оновлено ${new Date(lastSync).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv' })}` : '';
   }
 
-  // імʼя на парті зменшується, доки не влізе в місце
+  // імʼя на парті зменшується, доки не влізе
   function fitNames() {
     for (const el of $('rows').querySelectorAll('.nm')) {
       let fs = parseFloat(getComputedStyle(el).fontSize);
@@ -510,12 +516,12 @@
     if (!who) {
       b.classList.add('free');
       b.append(h('span', 'plus', '+'));
-      b.setAttribute('aria-label', `${label}: вільно`);
+      b.setAttribute('aria-label', `${label}: вільна`);
     } else {
       const first = who.name.split(/\s+/)[0];
       b.classList.add(day.mine === id ? 'mine' : 'taken');
       b.append(h('span', 'nm', first));
-      b.setAttribute('aria-label', `${label}: ${day.mine === id ? 'твоє місце' : who.name}`);
+      b.setAttribute('aria-label', `${label}: ${day.mine === id ? 'твоя парта' : who.name}`);
     }
     if (popSeat === id) { b.classList.add('pop'); popSeat = null; }
     b.onclick = () => onSeat(id);
@@ -541,11 +547,13 @@
     $('sheet-form').hidden = mine;
     $('sheet-mine').hidden = !mine;
     if (mine) {
-      $('sheet-text').innerHTML = `Це твоє місце: <b>${SIDES[sn.s]}</b>. Звільни його, якщо не прийдеш або хочеш пересісти.`;
+      $('sheet-text').innerHTML = 'Це твоя парта. Звільни її, якщо не прийдеш або хочеш пересісти.';
     } else {
       const was = day.mine ? seatName(day.mine) : null;
-      $('sheet-text').innerHTML = `<b>${cap(SIDES[sn.s])} місце</b>${was ? `. Твоє теперішнє місце (ряд ${was.r}, парта ${was.d}) звільниться.` : '.'}`;
-      $('sheet-submit').textContent = was ? 'Пересісти сюди' : 'Забронювати';
+      $('sheet-text').innerHTML = was
+        ? `Твоя теперішня парта (ряд ${was.r}, парта ${was.d}) звільниться.`
+        : 'Уся парта буде твоя на цей день.';
+      $('sheet-submit').textContent = was ? 'Пересісти сюди' : 'Забронювати парту';
       $('name-input').value = store.get('name', '');
     }
     $('scrim').hidden = false;
@@ -557,21 +565,21 @@
   $('sheet-form').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('name-input').value.trim().replace(/\s+/g, ' ');
-    if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чиє це місце.'; return; }
+    if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чия це парта.'; return; }
     store.set('name', name);
     const seat = sheetSeat, date = selDate;
     $('sheet-submit').disabled = true;
     try {
       const r = await api.book(date, seat, name);
-      data[date] = r.day;
+      data[date] = cleanDay(r.day);
       popSeat = seat;
       buzz([12, 50, 18]);
       closeSheet();
       renderDays();
       renderRoom();
-      toast(`Місце твоє ${DOW_ON[dowOf(date)]}, ${longDate(date)}`);
+      toast(`Парта твоя ${DOW_ON[dowOf(date)]}, ${longDate(date)}`);
     } catch (err) {
-      $('sheet-error').textContent = err.code === 'taken' ? 'Хтось щойно зайняв це місце. Обери інше.'
+      $('sheet-error').textContent = err.code === 'taken' ? 'Хтось щойно зайняв цю парту. Обери іншу.'
         : err.code === 'date' ? 'На цей день бронювати вже не можна.'
         : 'Не вдалося забронювати. Перевір інтернет і спробуй ще раз.';
       if (err.code === 'taken') refresh();
@@ -584,14 +592,14 @@
     $('sheet-release').disabled = true;
     try {
       const r = await api.release(date);
-      data[date] = r.day;
+      data[date] = cleanDay(r.day);
       buzz(10);
       closeSheet();
       renderDays();
       renderRoom();
-      toast('Місце звільнено');
+      toast('Парту звільнено');
     } catch {
-      $('sheet-error').textContent = 'Не вдалося звільнити місце. Спробуй ще раз.';
+      $('sheet-error').textContent = 'Не вдалося звільнити парту. Спробуй ще раз.';
     } finally {
       $('sheet-release').disabled = false;
     }
