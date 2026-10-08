@@ -74,7 +74,7 @@
   <button role="tab" id="tab-desks" data-tab="desks" aria-selected="true">Парти</button>
   <button role="tab" id="tab-week" data-tab="week" aria-selected="false">Розклад</button>
   <button role="tab" id="tab-hw" data-tab="hw" aria-selected="false">Домашка</button>
-  <button role="tab" id="tab-polls" data-tab="polls" aria-selected="false">Опитування</button>
+  <button role="tab" id="tab-chat" data-tab="chat" aria-selected="false">Чат<i class="unread" id="unread" hidden></i></button>
 </nav>
 
 <main>
@@ -143,23 +143,47 @@
     <p class="muted hw-note">Записати може будь-хто з класу: торкнись уроку. Видно, хто і коли записав.</p>
   </section>
 
-  <!-- Опитування -->
-  <section class="panel" id="panel-polls" role="tabpanel" aria-labelledby="tab-polls" hidden>
-    <div class="room-head">
-      <div>
-        <div class="eyebrow">Опитування</div>
-        <div class="room-day">Що думає клас</div>
-      </div>
-      <button type="button" class="btn primary btn-small" id="poll-new">Нове опитування</button>
+  <!-- Чат і опитування -->
+  <section class="panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
+    <div class="seg-ctl" id="chat-seg" role="radiogroup" aria-label="Що показати">
+      <button type="button" role="radio" data-cview="chat" aria-checked="true">Чат</button>
+      <button type="button" role="radio" data-cview="polls" aria-checked="false">Опитування</button>
     </div>
-    <div class="polls" id="polls"></div>
-    <p class="muted hw-note">Голосувати можна один раз, але відповідь можна змінити. Опитування зникає через 2 тижні.</p>
+
+    <div id="cview-chat" class="view">
+      <div class="chat" id="chat" aria-live="polite">
+        <p class="chat-empty" id="chat-empty">Тут поки тихо. Напиши першим.</p>
+      </div>
+      <form class="chat-form" id="chat-form" autocomplete="off">
+        <input id="chat-name" class="chat-name" maxlength="32" placeholder="Твоє імʼя" hidden>
+        <div class="chat-row">
+          <textarea id="chat-text" rows="1" maxlength="500" placeholder="Повідомлення класу"></textarea>
+          <button type="submit" class="chat-send" id="chat-send" aria-label="Надіслати">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </form>
+      <p class="muted hw-note">Повідомлення бачить увесь клас і зникають через тиждень. Своє можна видалити.</p>
+    </div>
+
+    <div id="cview-polls" class="view" hidden>
+      <div class="room-head">
+        <div>
+          <div class="eyebrow">Опитування</div>
+          <div class="room-day">Що думає клас</div>
+        </div>
+        <button type="button" class="btn primary btn-small" id="poll-new">Нове опитування</button>
+      </div>
+      <div class="polls" id="polls"></div>
+      <p class="muted hw-note">Голосувати можна один раз, але відповідь можна змінити. Опитування зникає через 2 тижні.</p>
+    </div>
   </section>
 </main>
 
 <footer class="foot">
   <span>8-Б · <span id="year"></span></span>
   <span>Розклад з rozklad.org, станом на 31.08.2026</span>
+  <button type="button" class="link-btn admin-link" id="admin-link">Староста</button>
 </footer>
 
 </div>
@@ -181,6 +205,10 @@
       <button type="submit" class="btn primary" id="sheet-submit">Забронювати</button>
     </div>
   </form>
+  <div class="sheet-actions" id="sheet-admin" hidden>
+    <button type="button" class="btn ghost" id="sheet-admin-close">Закрити</button>
+    <button type="button" class="btn danger" id="sheet-admin-release">Зняти бронь</button>
+  </div>
   <div class="sheet-actions" id="sheet-mine" hidden>
     <button type="button" class="btn ghost" id="sheet-close">Закрити</button>
     <button type="button" class="btn danger" id="sheet-release">Звільнити парту</button>
@@ -212,6 +240,7 @@
   <div class="hw-hist" id="hw-hist-box" hidden>
     <button type="button" class="hist-toggle" id="hw-hist-btn" aria-expanded="false"></button>
     <ol class="hist-list" id="hw-hist" hidden></ol>
+    <button type="button" class="link-btn admin-only" id="hw-hist-clear" hidden>Очистити історію (староста)</button>
   </div>
   <p class="sheet-error" id="hw-error" role="alert"></p>
 </div>
@@ -241,6 +270,25 @@
     </div>
   </form>
   <p class="sheet-error" id="poll-error" role="alert"></p>
+</div>
+
+<!-- Аркуш старости -->
+<div class="sheet" id="admin-sheet" role="dialog" aria-modal="true" aria-labelledby="admin-title" hidden>
+  <div class="sheet-grip"></div>
+  <div class="sheet-eyebrow">Режим старости</div>
+  <h3 class="sheet-title" id="admin-title">Код старости</h3>
+  <p class="sheet-text" id="admin-text">Староста може знімати будь-які броні, видаляти опитування й повідомлення та чистити історію домашки.</p>
+  <form id="admin-form" autocomplete="off">
+    <label class="field" for="admin-code" id="admin-code-field">
+      <span>Код</span>
+      <input id="admin-code" maxlength="40" placeholder="XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" spellcheck="false">
+    </label>
+    <div class="sheet-actions">
+      <button type="button" class="btn ghost" id="admin-cancel">Закрити</button>
+      <button type="submit" class="btn primary" id="admin-save">Увійти</button>
+    </div>
+  </form>
+  <p class="sheet-error" id="admin-error" role="alert"></p>
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>

@@ -221,12 +221,15 @@
     return { seats, mine: seatIds.includes(day.mine) ? day.mine : null };
   };
 
-  // Сервер: /api/days, /api/book, /api/release, /api/hw (src/worker.js). Якщо його немає — демо в localStorage.
+  // Сервер — src/worker.js. Якщо його немає — демо в localStorage.
+  let adminKey = store.get('admin');
   const server = {
     async req(path, body) {
+      const headers = { 'content-type': 'application/json', 'x-token': token };
+      if (adminKey) headers['x-admin'] = adminKey;
       const r = await fetch((C.api || '').replace(/\/$/, '') + path, {
         method: body ? 'POST' : 'GET',
-        headers: { 'content-type': 'application/json', 'x-token': token },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         cache: 'no-store',
       });
@@ -236,16 +239,19 @@
       if (!r.ok) throw Object.assign(new Error(data.error || 'error'), { code: data.code });
       return data;
     },
-    days: dates => server.req(`/api/days?dates=${dates.join(',')}`),
+    sync: q => server.req(`/api/sync?dates=${q.dates.join(',')}&from=${q.from}&to=${q.to}&chat=${q.chat}&rev=${q.rev}`),
     book: (date, seat, name) => server.req('/api/book', { date, seat, name }),
     release: date => server.req('/api/release', { date }),
-    hw: (from, to) => server.req(`/api/hw?from=${from}&to=${to}`),
     setHw: (date, lesson, text, name) => server.req('/api/hw', { date, lesson, text, name }),
     hwHistory: (date, lesson) => server.req(`/api/hw/history?date=${date}&lesson=${lesson}`),
-    polls: () => server.req('/api/polls'),
     createPoll: (q, options, name) => server.req('/api/polls', { q, options, name }),
     vote: (id, option) => server.req('/api/polls/vote', { id, option }),
     deletePoll: id => server.req('/api/polls/delete', { id }),
+    sendChat: (text, name) => server.req('/api/chat', { text, name }),
+    deleteChat: id => server.req('/api/chat/delete', { id }),
+    adminCheck: () => server.req('/api/admin'),
+    adminRelease: (date, seat) => server.req('/api/admin/release', { date, seat }),
+    hwHistoryClear: (date, lesson) => server.req('/api/admin/hw-history-clear', { date, lesson }),
   };
 
   const demo = {
@@ -304,7 +310,22 @@
         return { ...p, counts, total: counts.reduce((a, b) => a + b, 0), own: true };
       }) };
     },
-    async polls() { return demo.pollView(); },
+    async sync(q) {
+      const { days } = await demo.days(q.dates), { hw } = await demo.hw(q.from, q.to);
+      const msgs = store.get('demo-chat', []).map(m => ({ ...m, own: true }));
+      return { days, hw, polls: demo.pollView().polls, chat: { rev: 0, full: true, msgs } };
+    },
+    async sendChat(text, name) {
+      const all = store.get('demo-chat', []);
+      all.push({ id: (all.at(-1)?.id || 0) + 1, text, by: name, at: Date.now() });
+      store.set('demo-chat', all.slice(-100));
+      return { ok: true };
+    },
+    async deleteChat(id) {
+      store.set('demo-chat', store.get('demo-chat', []).filter(m => m.id !== id));
+      return { ok: true };
+    },
+    async adminCheck() { return { admin: false }; },
     async createPoll(q, options, name) {
       const all = store.get('demo-polls', []);
       all.unshift({ id: Date.now(), q, options, by: name, at: Date.now(), mine: null });
@@ -330,6 +351,8 @@
   let hw = {};            // "date|урок" -> { text, by, at }
   let polls = [];
   let lastSync = 0;
+  let isAdmin = !!adminKey;
+  const SLOW = 'Забагато дій підряд. Зачекай хвилину й спробуй знову.';
 
   // Бронювати можна лише напередодні: від попереднього навчального дня до початку самого дня
   // (на понеділок — з пʼятниці). Те саме перевіряє сервер.
@@ -361,10 +384,11 @@
     if (!bookDates.length) return;
     try {
       const week = weekDates(kyivNow());
-      const [r, w, pl] = await Promise.all([api.days(bookDates), api.hw(week[0], addDays(week[0], 20)), api.polls()]);
+      const r = await api.sync({ dates: bookDates, from: week[0], to: addDays(week[0], 20), chat: chatLast, rev: chatRev });
       data = Object.fromEntries(Object.entries(r.days).map(([d, day]) => [d, cleanDay(day)]));
-      hw = w.hw;
-      polls = pl.polls;
+      hw = r.hw;
+      polls = r.polls;
+      mergeChat(r.chat);
       if (!lastSync && C.api) $('demo').hidden = true;
       lastSync = Date.now();
     } catch (e) {
@@ -481,6 +505,7 @@
     let history = [];
     try { ({ history } = await api.hwHistory(date, n + 1)); } catch { return; }
     if (!hwOpen || hwOpen.date !== date || hwOpen.n !== n || !history.length) return;
+    $('hw-hist-clear').hidden = !isAdmin;
     btn.textContent = `Попередні версії · ${history.length}`;
     list.textContent = '';
     for (const v of history) {
@@ -495,6 +520,16 @@
     }
     box.hidden = false;
   }
+  $('hw-hist-clear').addEventListener('click', async () => {
+    const { date, n } = hwOpen;
+    try {
+      await api.hwHistoryClear(date, n + 1);
+      $('hw-hist-box').hidden = true;
+      toast('Історію очищено');
+    } catch {
+      toast('Не вдалося очистити історію.');
+    }
+  });
   $('hw-hist-btn').addEventListener('click', () => {
     const open = $('hw-hist').hidden;
     $('hw-hist').hidden = !open;
@@ -520,7 +555,7 @@
       renderHwAll();
       toast(text ? 'Домашку збережено' : 'Запис стерто');
     } catch (err) {
-      $('hw-error').textContent = err.code === 'date' ? 'На цей день записувати вже не можна.' : 'Не вдалося зберегти. Перевір інтернет і спробуй ще раз.';
+      $('hw-error').textContent = err.code === 'slow' ? SLOW : err.code === 'date' ? 'На цей день записувати вже не можна.' : 'Не вдалося зберегти. Перевір інтернет і спробуй ще раз.';
     } finally {
       $('hw-save').disabled = false;
     }
@@ -629,7 +664,7 @@
   function onSeat(id) {
     const day = data[selDate] || { seats: {}, mine: null };
     const who = day.seats[id];
-    if (who && day.mine !== id) return toast(`${who.name} · ${seatName(id).text}`);
+    if (who && day.mine !== id) return isAdmin ? openAdminSeat(id, who) : toast(`${who.name} · ${seatName(id).text}`);
     if (!who && !bookable(selDate)) return toast('Бронювати можна лише напередодні');
     openSheet(id, day);
   }
@@ -645,6 +680,7 @@
     $('sheet-error').textContent = '';
     $('sheet-form').hidden = mine;
     $('sheet-mine').hidden = !mine;
+    $('sheet-admin').hidden = true;
     if (mine) {
       $('sheet-text').innerHTML = 'Це твоя парта. Звільни її, якщо не прийдеш або хочеш пересісти.';
     } else {
@@ -659,8 +695,37 @@
     $('sheet').hidden = false;
     if (!mine && !$('name-input').value) setTimeout(() => $('name-input').focus(), 250);
   }
+  // староста знімає чужу бронь
+  function openAdminSeat(id, who) {
+    sheetSeat = id;
+    const sn = seatName(id);
+    $('sheet-eyebrow').textContent = `${DOW[dowOf(selDate)]}, ${longDate(selDate)} · староста`;
+    $('sheet-title').textContent = `Ряд ${sn.r} · парта ${sn.d}`;
+    $('sheet-text').textContent = `Зайняв(ла): ${who.name} — зняти цю бронь?`;
+    $('sheet-error').textContent = '';
+    $('sheet-form').hidden = true;
+    $('sheet-mine').hidden = true;
+    $('sheet-admin').hidden = false;
+    $('scrim').hidden = false;
+    $('sheet').hidden = false;
+  }
+  $('sheet-admin-release').addEventListener('click', async () => {
+    const date = selDate;
+    try {
+      const r = await api.adminRelease(date, sheetSeat);
+      data[date] = cleanDay(r.day);
+      closeSheet();
+      renderDays();
+      renderRoom();
+      toast('Бронь знято');
+    } catch {
+      $('sheet-error').textContent = 'Не вдалося зняти бронь. Спробуй ще раз.';
+    }
+  });
+  $('sheet-admin-close').addEventListener('click', () => closeSheet());
+
   function closeSheet() {
-    for (const id of ['scrim', 'sheet', 'hw-sheet', 'poll-sheet']) $(id).hidden = true;
+    for (const id of ['scrim', 'sheet', 'hw-sheet', 'poll-sheet', 'admin-sheet']) $(id).hidden = true;
     sheetSeat = null;
     hwOpen = null;
   }
@@ -692,6 +757,7 @@
     } catch (err) {
       if (err.code === 'taken') refresh();
       return err.code === 'taken' ? 'Хтось щойно зайняв цю парту. Обери іншу.'
+        : err.code === 'slow' ? SLOW
         : err.code === 'date' ? 'На цей день бронювати не можна: тільки напередодні.'
         : 'Не вдалося забронювати. Перевір інтернет і спробуй ще раз.';
     }
@@ -738,7 +804,12 @@
   }
 
   // ---------- опитування ----------
+  let pollsKey = '';
   function renderPolls() {
+    // перемальовуємо лише коли щось змінилось — інакше оновлення кожні 10 с скидало б «Точно видалити?»
+    const key = JSON.stringify(polls) + isAdmin;
+    if (key === pollsKey) return;
+    pollsKey = key;
     const box = $('polls');
     box.textContent = '';
     if (!polls.length) {
@@ -763,7 +834,7 @@
         opts.append(b);
       });
       card.append(opts);
-      if (p.own) {
+      if (p.own || isAdmin) {
         const del = h('button', 'link-btn poll-del', 'Видалити опитування');
         del.type = 'button';
         del.onclick = () => deletePoll(p, del);
@@ -779,8 +850,8 @@
       buzz(8);
       renderPolls();
       if (option == null) toast('Голос знято');
-    } catch {
-      toast('Не вдалося проголосувати. Спробуй ще раз.');
+    } catch (e) {
+      toast(e.code === 'slow' ? SLOW : 'Не вдалося проголосувати. Спробуй ще раз.');
     }
   }
 
@@ -845,11 +916,188 @@
       renderPolls();
       toast('Опитування створено');
     } catch (e2) {
-      err(e2.code === 'limit' ? 'Можна мати до 3 опитувань одночасно. Видали старе.' : 'Не вдалося створити. Перевір інтернет і спробуй ще раз.');
+      err(e2.code === 'limit' ? 'Можна мати до 3 опитувань одночасно. Видали старе.' : e2.code === 'slow' ? SLOW : 'Не вдалося створити. Перевір інтернет і спробуй ще раз.');
     } finally {
       $('poll-save').disabled = false;
     }
   });
+
+  // ---------- чат ----------
+  let chatMsgs = [], chatLast = 0, chatRev = 0;
+  function mergeChat(c) {
+    if (!c) return;
+    const before = chatLast;
+    chatMsgs = c.full ? c.msgs : chatMsgs.concat(c.msgs.filter(m => m.id > chatLast));
+    chatRev = c.rev;
+    chatLast = chatMsgs.length ? chatMsgs[chatMsgs.length - 1].id : 0;
+    if (c.full || chatLast !== before) renderChat();
+    updateUnread();
+  }
+  const chatOpen = () => currentTab === 'chat' && cview === 'chat' && !document.hidden;
+  function updateUnread() {
+    if (chatOpen()) store.set('chatSeen', chatLast);
+    const seen = store.get('chatSeen', 0);
+    $('unread').hidden = !chatMsgs.some(m => m.id > seen && !m.own);
+  }
+  const hm = at => new Date(at).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' });
+  const kyivDate = at => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date(at));
+
+  function renderChat() {
+    const box = $('chat');
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    box.textContent = '';
+    if (!chatMsgs.length) {
+      box.append(h('p', 'chat-empty', 'Тут поки тихо. Напиши першим.'));
+      return;
+    }
+    const today = kyivNow().date;
+    let prev = null;
+    for (const m of chatMsgs) {
+      const d = kyivDate(m.at);
+      if (!prev || kyivDate(prev.at) !== d) {
+        box.append(h('div', 'chat-day', d === today ? 'Сьогодні' : d === addDays(today, -1) ? 'Вчора' : longDate(d)));
+        prev = null;
+      }
+      const cont = prev && prev.by === m.by && prev.own === m.own && m.at - prev.at < 5 * 60e3;
+      const el = h('div', `msg ${m.own ? 'own' : 'other'}${cont ? ' cont' : ''}`);
+      if (!cont) {
+        const head = h('div', 'msg-head');
+        head.append(h('b', '', m.own ? 'Ти' : m.by), h('time', '', hm(m.at)));
+        el.append(head);
+      }
+      const bubble = h('div', 'bubble');
+      bubble.append(h('span', 'msg-text', m.text));
+      if (m.own || isAdmin) {
+        const del = h('button', 'msg-del', '×');
+        del.type = 'button';
+        del.setAttribute('aria-label', 'Видалити повідомлення');
+        del.onclick = () => deleteMsg(m, del);
+        bubble.append(del);
+      }
+      el.append(bubble);
+      box.append(el);
+      prev = m;
+    }
+    if (nearBottom || chatMsgs[chatMsgs.length - 1]?.own) box.scrollTop = box.scrollHeight;
+  }
+
+  async function deleteMsg(m, btn) {
+    if (!btn.dataset.sure) {
+      btn.dataset.sure = '1';
+      btn.textContent = 'видалити?';
+      btn.classList.add('sure');
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.sure; btn.textContent = '×'; btn.classList.remove('sure'); } }, 4000);
+      return;
+    }
+    try {
+      await api.deleteChat(m.id);
+      chatMsgs = chatMsgs.filter(x => x.id !== m.id);
+      renderChat();
+      refresh();
+    } catch {
+      toast('Не вдалося видалити.');
+    }
+  }
+
+  function chatResize() {
+    const t = $('chat-text');
+    t.style.height = 'auto';
+    t.style.height = `${Math.min(t.scrollHeight, 140)}px`;
+  }
+  $('chat-text').addEventListener('input', chatResize);
+  $('chat-text').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('chat-form').requestSubmit(); }
+  });
+  $('chat-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = $('chat-text').value.trim();
+    if (!text) return;
+    let name = store.get('name', '');
+    if (!name) {
+      const n = $('chat-name').value.trim().replace(/\s+/g, ' ');
+      if (n.length < 2) {
+        $('chat-name').hidden = false;
+        $('chat-name').focus();
+        return toast('Спершу напиши своє імʼя');
+      }
+      store.set('name', (name = n));
+      $('chat-name').hidden = true;
+    }
+    $('chat-send').disabled = true;
+    try {
+      await api.sendChat(text, name);
+      $('chat-text').value = '';
+      chatResize();
+      await refresh();
+      $('chat').scrollTop = $('chat').scrollHeight;
+    } catch (err) {
+      toast(err.code === 'slow' ? 'Забагато повідомлень. Зачекай хвилину.' : 'Не вдалося надіслати. Перевір інтернет.');
+    } finally {
+      $('chat-send').disabled = false;
+    }
+  });
+
+  // ---------- староста ----------
+  function adminUi() {
+    $('admin-link').textContent = isAdmin ? 'Режим старости · вийти' : 'Староста';
+    document.documentElement.classList.toggle('is-admin', isAdmin);
+    pollsKey = '';
+    renderPolls();
+    renderChat();
+  }
+  $('admin-link').addEventListener('click', () => {
+    if (isAdmin) {
+      isAdmin = false;
+      adminKey = null;
+      store.set('admin', null);
+      adminUi();
+      return toast('Режим старости вимкнено');
+    }
+    $('admin-code').value = '';
+    $('admin-error').textContent = '';
+    $('scrim').hidden = false;
+    $('admin-sheet').hidden = false;
+    setTimeout(() => $('admin-code').focus(), 250);
+  });
+  $('admin-cancel').addEventListener('click', () => closeSheet());
+  $('admin-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const key = $('admin-code').value.trim().toUpperCase();
+    if (!key) return;
+    adminKey = key;
+    let ok = false;
+    try { ({ admin: ok } = await api.adminCheck()); } catch {}
+    if (!ok) {
+      adminKey = null;
+      $('admin-error').textContent = 'Код не підходить.';
+      return;
+    }
+    isAdmin = true;
+    store.set('admin', key);
+    closeSheet();
+    adminUi();
+    toast('Режим старости увімкнено');
+  });
+
+  // ---------- оновлення ----------
+  // Частота: чат відкритий — 4 с, звичайно — 10 с, без дій понад 5 хв або вкладка прихована — 60 с.
+  let lastActive = Date.now(), pollTimer = null;
+  const idle = () => Date.now() - lastActive > 5 * 60e3;
+  for (const ev of ['pointerdown', 'keydown', 'scroll']) {
+    addEventListener(ev, () => {
+      const wasIdle = idle();
+      lastActive = Date.now();
+      if (wasIdle) { refresh(); schedule(); }
+    }, { passive: true });
+  }
+  function schedule() {
+    clearTimeout(pollTimer);
+    const wait = document.hidden || idle() ? 60e3 : chatOpen() ? 4e3 : 10e3;
+    pollTimer = setTimeout(async () => {
+      if (!document.hidden && api === server) await refresh();
+      schedule();
+    }, wait);
+  }
 
   // ---------- розклад ----------
   let weekSel = null;
@@ -953,24 +1201,37 @@
   }
 
   // ---------- вкладки ----------
-  const TABS = ['desks', 'week', 'hw', 'polls'];
+  const TABS = ['desks', 'week', 'hw', 'chat'];
+  let currentTab = 'desks', cview = 'chat';
+  function showCView(v) {
+    cview = v;
+    for (const b of document.querySelectorAll('#chat-seg button')) b.setAttribute('aria-checked', String(b.dataset.cview === v));
+    $('cview-chat').hidden = v !== 'chat';
+    $('cview-polls').hidden = v !== 'polls';
+    store.set('cview', v);
+    if (chatOpen()) { updateUnread(); $('chat').scrollTop = $('chat').scrollHeight; refresh(); schedule(); }
+  }
+  document.querySelectorAll('#chat-seg button').forEach(b => b.addEventListener('click', () => showCView(b.dataset.cview)));
   function showView(view) {
-    for (const b of document.querySelectorAll('.seg-ctl button')) b.setAttribute('aria-checked', String(b.dataset.view === view));
+    for (const b of document.querySelectorAll('.seg-ctl button[data-view]')) b.setAttribute('aria-checked', String(b.dataset.view === view));
     $('view-lessons').hidden = view !== 'lessons';
     $('view-bells').hidden = view !== 'bells';
     store.set('view', view);
   }
-  document.querySelectorAll('.seg-ctl button').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+  document.querySelectorAll('.seg-ctl button[data-view]').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   function showTab(name) {
     // дзвінки тепер усередині «Розкладу»
     if (name === 'bells') { showView('bells'); name = 'week'; }
+    if (name === 'polls') { showCView('polls'); name = 'chat'; }
     if (!TABS.includes(name)) name = 'desks';
     for (const t of TABS) {
       $(`tab-${t}`).setAttribute('aria-selected', String(t === name));
       $(`panel-${t}`).hidden = t !== name;
     }
+    currentTab = name;
     store.set('tab', name);
     if (location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
+    if (chatOpen()) { updateUnread(); $('chat').scrollTop = $('chat').scrollHeight; refresh(); schedule(); }
   }
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
@@ -1047,11 +1308,14 @@
   $('year').textContent = C.year;
   $('rules').append(...C.rules.map(r => h('li', '', r)));
   showView(store.get('view', 'lessons'));
+  cview = store.get('cview', 'chat');
+  showCView(cview);
+  if (isAdmin) adminUi();
   showTab(location.hash.slice(1) || store.get('tab', 'desks'));
   tick();
   setInterval(tick, 1000);
-  setInterval(() => { if (!document.hidden && api === server) refresh(); }, 10000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  schedule();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); updateUnread(); } schedule(); });
   // офлайн і встановлення на телефон (sw.js); у вбудованому перегляді просто не спрацює
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
