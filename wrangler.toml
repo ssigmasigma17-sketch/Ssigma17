@@ -1,0 +1,16 @@
+# Cloudflare Worker class-8b — сервер сайту 8-Б (броні парт і домашка), код у папці 8b-worker.
+# Лежить у корені, бо в Cloudflare коренева папка збірки — «/».
+name = "class-8b"
+main = "8b-worker/worker.js"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "Board"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Board"]
+
+# Пробні збірки з інших гілок (npx wrangler preview) вимагають цей блок, хай і порожній.
+[previews]
