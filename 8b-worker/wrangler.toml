@@ -1,0 +1,13 @@
+# Сервер для сайту 8-Б (сторінка лежить на GitHub Pages у гілці gh-pages, папка 8b/).
+# Зберігає броні парт і домашку. Cloudflare: Workers → Import a repository → коренева папка 8b-worker.
+name = "class-8b"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "Board"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Board"]
