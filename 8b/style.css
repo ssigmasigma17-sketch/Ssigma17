@@ -197,17 +197,17 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tabs button {
   position: relative;
   flex: 0 0 auto;
-  padding: 10px clamp(7px, 2.2vw, 14px) 12px;
+  padding: 10px clamp(5px, 1.5vw, 14px) 12px;
   border: 0;
   background: none;
-  font: 500 clamp(12.5px, 3.5vw, 15px)/1 var(--f-display);
+  font: 500 clamp(11.5px, 3.3vw, 15px)/1 var(--f-display);
   white-space: nowrap;
   color: var(--muted);
   border-radius: 8px;
 }
 .tabs button[aria-selected="true"] { color: var(--fg); }
 .tabs button[aria-selected="true"]::after {
-  content: ''; position: absolute; left: clamp(7px, 2.2vw, 14px); right: clamp(7px, 2.2vw, 14px); bottom: 2px; height: 3px;
+  content: ''; position: absolute; left: clamp(5px, 1.5vw, 14px); right: clamp(5px, 1.5vw, 14px); bottom: 2px; height: 3px;
   background: var(--red); border-radius: 2px;
 }
 
@@ -219,7 +219,7 @@ main { padding-top: 22px; }
 .h2 { margin: 0; font: 700 20px/1.2 var(--f-display); letter-spacing: -0.01em; }
 
 /* ---------- дні ---------- */
-.days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.days { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 8px; }
 .day {
   display: grid; justify-items: center; gap: 4px;
   padding: 10px 4px 9px;
@@ -344,6 +344,29 @@ main { padding-top: 22px; }
 .lesson.now .n { color: var(--red); }
 .lesson.past { opacity: 0.55; }
 
+/* правило «напередодні» і звична парта */
+.room-note { margin: 0; padding: 10px 14px; border-left: 2px solid var(--red); font-size: 14px; color: var(--muted); }
+.fav-btn {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  width: 100%; padding: 14px 16px; text-align: left;
+  border: 1.5px solid var(--ink); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink) 7%, var(--surface)); color: var(--ink);
+  font-size: 15px; font-weight: 500;
+}
+.fav-btn b { font: 700 20px/1 var(--f-hand); }
+.fav-btn:active { transform: scale(0.98); }
+.seat.fav { border-color: var(--ink); }
+.fav-label { font: 700 16px/1 var(--f-hand); color: var(--ink); }
+
+/* уроки / дзвінки */
+.seg-ctl {
+  display: inline-grid; grid-auto-flow: column; justify-self: start; gap: 2px;
+  padding: 3px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--surface);
+}
+.seg-ctl button { padding: 8px 16px; border: 0; border-radius: 9px; background: none; font: 500 14px/1 var(--f-display); color: var(--muted); }
+.seg-ctl button[aria-checked="true"] { background: var(--fg); color: var(--paper); }
+.view { display: grid; gap: 18px; }
+
 /* ---------- домашка ---------- */
 .hw-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .hw-item {
@@ -364,6 +387,53 @@ main { padding-top: 22px; }
 .lesson .hw-text { font-size: 18px; margin-top: 2px; }
 .seg.has-hw::after { content: ''; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--ink); }
 .seg.cur.has-hw::after { background: var(--red); }
+
+/* історія версій */
+.hw-hist { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.hist-toggle { justify-self: start; border: 0; background: none; padding: 4px 0; color: var(--muted); font-size: 14px; font-weight: 500; }
+.hist-toggle::after { content: ' ▾'; }
+.hist-toggle[aria-expanded="true"]::after { content: ' ▴'; }
+.hist-list { list-style: none; margin: 0; padding: 0; display: grid; max-height: 34vh; overflow-y: auto; }
+.hist-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.hist-body { display: grid; gap: 2px; min-width: 0; }
+.hist-body .hw-text { font-size: 18px; }
+.hist-back { color: var(--ink); }
+
+/* ---------- опитування ---------- */
+.btn-small { padding: 10px 14px; font-size: 14px; white-space: nowrap; }
+.polls { display: grid; gap: 26px; }
+.polls-empty { margin: 0; padding: 18px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); }
+.poll { display: grid; gap: 8px; padding-top: 12px; border-top: 2px solid var(--fg); }
+.poll-q { margin: 0; font: 700 18px/1.25 var(--f-display); letter-spacing: -0.01em; text-wrap: balance; }
+.poll-meta { font-size: 13px; color: var(--muted); }
+.poll-opts { display: grid; gap: 8px; margin-top: 4px; }
+.opt {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 48px; padding: 12px 14px; text-align: left;
+  border: 1.5px solid var(--line-strong); border-radius: 10px; background: var(--surface);
+  font-size: 15.5px; font-weight: 500;
+}
+.opt-bar { position: absolute; inset: 0 auto 0 0; background: var(--seat-taken); transition: width 0.4s ease; }
+.opt-t, .opt-c { position: relative; }
+.opt-t { min-width: 0; overflow-wrap: anywhere; }
+.opt-c { font: 500 12.5px/1 var(--f-mono); color: var(--muted); white-space: nowrap; }
+.opt.lead .opt-t { font-weight: 700; }
+.opt.mine { border-color: var(--red); }
+.opt.mine .opt-bar { background: color-mix(in srgb, var(--red) 18%, transparent); }
+.opt.mine .opt-c { color: var(--red); }
+.opt:active { transform: scale(0.98); }
+.poll-del { justify-self: start; padding-left: 0; }
+.poll-inputs { display: grid; gap: 8px; }
+.poll-inputs input {
+  width: 100%; padding: 10px 14px; font: 700 20px/1.2 var(--f-hand); color: var(--ink);
+  background: var(--paper); border: 1.5px solid var(--line-strong); border-radius: 10px;
+}
+.poll-inputs input:focus { outline: none; border-color: var(--ink); }
+.add-opt { justify-self: start; padding-left: 0; color: var(--ink); }
+.add-opt::before { content: '+ '; }
+#poll-form { display: grid; gap: 14px; }
+.sheet { max-height: calc(100% - 40px); overflow-y: auto; }
 
 /* ---------- дзвінки ---------- */
 .bells { list-style: none; margin: 0; padding: 0; max-width: 620px; display: grid; }

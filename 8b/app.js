@@ -241,6 +241,11 @@
     release: date => server.req('/api/release', { date }),
     hw: (from, to) => server.req(`/api/hw?from=${from}&to=${to}`),
     setHw: (date, lesson, text, name) => server.req('/api/hw', { date, lesson, text, name }),
+    hwHistory: (date, lesson) => server.req(`/api/hw/history?date=${date}&lesson=${lesson}`),
+    polls: () => server.req('/api/polls'),
+    createPoll: (q, options, name) => server.req('/api/polls', { q, options, name }),
+    vote: (id, option) => server.req('/api/polls/vote', { id, option }),
+    deletePoll: id => server.req('/api/polls/delete', { id }),
   };
 
   const demo = {
@@ -280,10 +285,41 @@
     },
     async setHw(date, lesson, text, name) {
       const all = store.get('demo-hw', {}), key = `${date}|${lesson}`;
+      if (all[key] && all[key].text !== text) {
+        const hist = store.get('demo-hw-hist', {});
+        (hist[key] ||= []).unshift(all[key]);
+        store.set('demo-hw-hist', hist);
+      }
       if (text) all[key] = { text, by: name, at: Date.now() };
       else delete all[key];
       store.set('demo-hw', all);
       return { hw: all[key] ? { [key]: all[key] } : {} };
+    },
+    async hwHistory(date, lesson) {
+      return { history: store.get('demo-hw-hist', {})[`${date}|${lesson}`] || [] };
+    },
+    pollView() {
+      return { polls: store.get('demo-polls', []).map(p => {
+        const counts = p.options.map((o, i) => (p.mine === i ? 1 : 0));
+        return { ...p, counts, total: counts.reduce((a, b) => a + b, 0), own: true };
+      }) };
+    },
+    async polls() { return demo.pollView(); },
+    async createPoll(q, options, name) {
+      const all = store.get('demo-polls', []);
+      all.unshift({ id: Date.now(), q, options, by: name, at: Date.now(), mine: null });
+      store.set('demo-polls', all);
+      return demo.pollView();
+    },
+    async vote(id, option) {
+      const all = store.get('demo-polls', []);
+      for (const p of all) if (p.id === id) p.mine = option;
+      store.set('demo-polls', all);
+      return demo.pollView();
+    },
+    async deletePoll(id) {
+      store.set('demo-polls', store.get('demo-polls', []).filter(p => p.id !== id));
+      return demo.pollView();
     },
   };
 
@@ -292,15 +328,30 @@
   let selDate = null;
   let data = {};          // date -> { seats: { id: { name } }, mine }
   let hw = {};            // "date|урок" -> { text, by, at }
+  let polls = [];
   let lastSync = 0;
 
+  // Бронювати можна лише напередодні: від попереднього навчального дня до початку самого дня
+  // (на понеділок — з пʼятниці). Те саме перевіряє сервер.
+  function bookable(date, today = kyivNow().date) {
+    if (date <= today || !lessonsOf(dowOf(date))) return false;
+    let prev = addDays(date, -1);
+    while (!lessonsOf(dowOf(prev))) prev = addDays(prev, -1);
+    return today >= prev;
+  }
+  let hwDates = [];
+
   function setBookDates(now) {
-    const list = [];
+    // парти: сьогодні (подивитися, хто де сидить) і наступний навчальний день (його можна бронювати)
+    const list = lessonsOf(now.dow) ? [now.date] : [];
+    list.push(nextSchoolDay(now.date));
+    const hwList = [];
     let d = dayOver(now) ? nextSchoolDay(now.date) : now.date;
-    while (list.length < C.bookDays) { list.push(d); d = nextSchoolDay(d); }
-    if (list.join() === bookDates.join()) return;
+    while (hwList.length < C.hwDays) { hwList.push(d); d = nextSchoolDay(d); }
+    if (list.join() === bookDates.join() && hwList.join() === hwDates.join()) return;
     bookDates = list;
-    if (!bookDates.includes(selDate)) selDate = bookDates[0];
+    hwDates = hwList;
+    if (!bookDates.includes(selDate)) selDate = dayOver(now) ? bookDates[bookDates.length - 1] : bookDates[0];
     renderDays();
     renderHwPanel();
     refresh();
@@ -310,9 +361,10 @@
     if (!bookDates.length) return;
     try {
       const week = weekDates(kyivNow());
-      const [r, w] = await Promise.all([api.days(bookDates), api.hw(week[0], addDays(week[0], 20))]);
+      const [r, w, pl] = await Promise.all([api.days(bookDates), api.hw(week[0], addDays(week[0], 20)), api.polls()]);
       data = Object.fromEntries(Object.entries(r.days).map(([d, day]) => [d, cleanDay(day)]));
       hw = w.hw;
+      polls = pl.polls;
       if (!lastSync && C.api) $('demo').hidden = true;
       lastSync = Date.now();
     } catch (e) {
@@ -335,6 +387,7 @@
     renderDays();
     renderRoom();
     renderHwAll();
+    renderPolls();
   }
 
   // ---------- домашка ----------
@@ -360,11 +413,11 @@
   }
 
   function renderHwPanel() {
-    if (!bookDates.length) return;
-    if (!bookDates.includes(hwSel)) hwSel = bookDates[0];
+    if (!hwDates.length) return;
+    if (!hwDates.includes(hwSel)) hwSel = hwDates[0];
     const chips = $('hw-days'), today = kyivNow().date;
     chips.textContent = '';
-    for (const d of bookDates) {
+    for (const d of hwDates) {
       const b = h('button', 'day'), n = hwCount(d), L = lessonsOf(dowOf(d));
       b.type = 'button';
       b.setAttribute('role', 'radio');
@@ -413,10 +466,40 @@
     $('hw-name-field').hidden = !!name;
     $('hw-clear').hidden = !item;
     $('hw-error').textContent = '';
+    loadHwHistory(date, n);
     $('scrim').hidden = false;
     $('hw-sheet').hidden = false;
     setTimeout(() => $('hw-text').focus(), 250);
   }
+
+  // попередні версії запису: якщо хтось зіпсував домашку, її можна повернути
+  async function loadHwHistory(date, n) {
+    const box = $('hw-hist-box'), list = $('hw-hist'), btn = $('hw-hist-btn');
+    box.hidden = true;
+    list.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    let history = [];
+    try { ({ history } = await api.hwHistory(date, n + 1)); } catch { return; }
+    if (!hwOpen || hwOpen.date !== date || hwOpen.n !== n || !history.length) return;
+    btn.textContent = `Попередні версії · ${history.length}`;
+    list.textContent = '';
+    for (const v of history) {
+      const li = h('li', 'hist-item');
+      const body = h('div', 'hist-body');
+      body.append(h('div', 'hw-text', v.text), h('div', 'hw-by', `${v.by}, ${ago(v.at)}`));
+      const back = h('button', 'link-btn hist-back', 'Повернути');
+      back.type = 'button';
+      back.onclick = () => saveHw(v.text);
+      li.append(body, back);
+      list.append(li);
+    }
+    box.hidden = false;
+  }
+  $('hw-hist-btn').addEventListener('click', () => {
+    const open = $('hw-hist').hidden;
+    $('hw-hist').hidden = !open;
+    $('hw-hist-btn').setAttribute('aria-expanded', String(open));
+  });
 
   async function saveHw(text) {
     const { date, n } = hwOpen;
@@ -435,7 +518,7 @@
       buzz(10);
       closeSheet();
       renderHwAll();
-      toast(text ? 'Домашку записано' : 'Запис стерто');
+      toast(text ? 'Домашку збережено' : 'Запис стерто');
     } catch (err) {
       $('hw-error').textContent = err.code === 'date' ? 'На цей день записувати вже не можна.' : 'Не вдалося зберегти. Перевір інтернет і спробуй ще раз.';
     } finally {
@@ -451,6 +534,7 @@
 
   function renderDays() {
     const box = $('days'), today = kyivNow().date;
+    box.style.setProperty('--n', bookDates.length);
     box.textContent = '';
     for (const d of bookDates) {
       const b = h('button', 'day');
@@ -463,7 +547,7 @@
       const n = data[d] ? Object.keys(data[d].seats).length : 0;
       fill.style.width = `${(n / TOTAL) * 100}%`;
       bar.append(fill);
-      b.append(bar, h('span', 'd-today', d === today ? 'сьогодні' : data[d]?.mine ? 'є парта' : ''));
+      b.append(bar, h('span', 'd-today', data[d]?.mine ? 'є парта' : d === today ? 'сьогодні' : bookable(d, today) ? 'бронь відкрита' : ''));
       b.onclick = () => { selDate = d; renderDays(); renderRoom(); };
       box.append(b);
     }
@@ -474,6 +558,17 @@
     const taken = Object.keys(day.seats).length;
     $('room-day').textContent = `${cap(DOW[dowOf(selDate)])}, ${longDate(selDate)}`;
     $('tally').innerHTML = `<b>${TOTAL - taken}</b>вільних із ${TOTAL}`;
+    const open = bookable(selDate);
+    $('room-note').hidden = open;
+    $('room-note').textContent = 'Сьогодні бронювати вже не можна: парти бронюють напередодні.';
+    // звична парта — та, яку бронював минулого разу
+    const fav = store.get('fav');
+    const favFree = open && !day.mine && seatIds.includes(fav) && !day.seats[fav];
+    $('fav-btn').hidden = !favFree;
+    if (favFree) {
+      const f = seatName(fav);
+      $('fav-btn').innerHTML = `<span>Сісти за свою звичну парту</span><b>ряд ${f.r}, парта ${f.d}</b>`;
+    }
     const rows = $('rows');
     rows.style.setProperty('--rows', C.rows);
     rows.textContent = '';
@@ -481,7 +576,7 @@
       rows.append(h('div', 'desk-no', d));
       for (let r = 1; r <= C.rows; r++) {
         const desk = h('div', 'desk');
-        desk.append(seatButton(`${r}-${d}`, day));
+        desk.append(seatButton(`${r}-${d}`, day, favFree && fav === `${r}-${d}`));
         rows.append(desk);
       }
     }
@@ -507,7 +602,7 @@
   document.fonts?.ready.then(() => { if (bookDates.length) renderRoom(); });
 
   let popSeat = null;
-  function seatButton(id, day) {
+  function seatButton(id, day, isFav) {
     const b = h('button', 'seat');
     b.type = 'button';
     b.dataset.seat = id;
@@ -515,7 +610,10 @@
     const label = seatName(id).text;
     if (!who) {
       b.classList.add('free');
-      b.append(h('span', 'plus', '+'));
+      if (isFav) {
+        b.classList.add('fav');
+        b.append(h('span', 'fav-label', 'звична'));
+      } else b.append(h('span', 'plus', '+'));
       b.setAttribute('aria-label', `${label}: вільна`);
     } else {
       const first = who.name.split(/\s+/)[0];
@@ -532,6 +630,7 @@
     const day = data[selDate] || { seats: {}, mine: null };
     const who = day.seats[id];
     if (who && day.mine !== id) return toast(`${who.name} · ${seatName(id).text}`);
+    if (!who && !bookable(selDate)) return toast('Бронювати можна лише напередодні');
     openSheet(id, day);
   }
 
@@ -560,32 +659,50 @@
     $('sheet').hidden = false;
     if (!mine && !$('name-input').value) setTimeout(() => $('name-input').focus(), 250);
   }
-  function closeSheet() { $('scrim').hidden = true; $('sheet').hidden = true; $('hw-sheet').hidden = true; sheetSeat = null; hwOpen = null; }
+  function closeSheet() {
+    for (const id of ['scrim', 'sheet', 'hw-sheet', 'poll-sheet']) $(id).hidden = true;
+    sheetSeat = null;
+    hwOpen = null;
+  }
 
   $('sheet-form').addEventListener('submit', async e => {
     e.preventDefault();
     const name = $('name-input').value.trim().replace(/\s+/g, ' ');
     if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чия це парта.'; return; }
     store.set('name', name);
-    const seat = sheetSeat, date = selDate;
     $('sheet-submit').disabled = true;
+    const err = await bookSeat(sheetSeat, selDate, name);
+    $('sheet-submit').disabled = false;
+    if (err) $('sheet-error').textContent = err;
+  });
+
+  // повертає текст помилки або null
+  async function bookSeat(seat, date, name) {
     try {
       const r = await api.book(date, seat, name);
       data[date] = cleanDay(r.day);
+      store.set('fav', seat);
       popSeat = seat;
       buzz([12, 50, 18]);
       closeSheet();
       renderDays();
       renderRoom();
       toast(`Парта твоя ${DOW_ON[dowOf(date)]}, ${longDate(date)}`);
+      return null;
     } catch (err) {
-      $('sheet-error').textContent = err.code === 'taken' ? 'Хтось щойно зайняв цю парту. Обери іншу.'
-        : err.code === 'date' ? 'На цей день бронювати вже не можна.'
-        : 'Не вдалося забронювати. Перевір інтернет і спробуй ще раз.';
       if (err.code === 'taken') refresh();
-    } finally {
-      $('sheet-submit').disabled = false;
+      return err.code === 'taken' ? 'Хтось щойно зайняв цю парту. Обери іншу.'
+        : err.code === 'date' ? 'На цей день бронювати не можна: тільки напередодні.'
+        : 'Не вдалося забронювати. Перевір інтернет і спробуй ще раз.';
     }
+  }
+  $('fav-btn').addEventListener('click', async () => {
+    const fav = store.get('fav'), name = store.get('name', '');
+    if (!name) return openSheet(fav, data[selDate] || { seats: {}, mine: null });
+    $('fav-btn').disabled = true;
+    const err = await bookSeat(fav, selDate, name);
+    $('fav-btn').disabled = false;
+    if (err) toast(err);
   });
   $('sheet-release').addEventListener('click', async () => {
     const date = selDate;
@@ -619,6 +736,120 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => (t.hidden = true), 2600);
   }
+
+  // ---------- опитування ----------
+  function renderPolls() {
+    const box = $('polls');
+    box.textContent = '';
+    if (!polls.length) {
+      box.append(h('p', 'polls-empty', 'Поки опитувань немає. Створи перше — наприклад, куди йдемо після уроків.'));
+      return;
+    }
+    for (const p of polls) {
+      const card = h('article', 'poll');
+      card.append(h('h3', 'poll-q', p.q));
+      card.append(h('div', 'poll-meta', `${p.by}, ${ago(p.at)} · ${p.total} ${plural(p.total, 'голос', 'голоси', 'голосів')}`));
+      const opts = h('div', 'poll-opts');
+      const top = Math.max(...p.counts);
+      p.options.forEach((o, i) => {
+        const pct = p.total ? Math.round((p.counts[i] / p.total) * 100) : 0;
+        const b = h('button', `opt${p.mine === i ? ' mine' : ''}${p.total && p.counts[i] === top ? ' lead' : ''}`);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(p.mine === i));
+        const bar = h('span', 'opt-bar');
+        bar.style.width = `${pct}%`;
+        b.append(bar, h('span', 'opt-t', o), h('span', 'opt-c', `${p.counts[i]} · ${pct}%`));
+        b.onclick = () => votePoll(p, p.mine === i ? null : i);
+        opts.append(b);
+      });
+      card.append(opts);
+      if (p.own) {
+        const del = h('button', 'link-btn poll-del', 'Видалити опитування');
+        del.type = 'button';
+        del.onclick = () => deletePoll(p, del);
+        card.append(del);
+      }
+      box.append(card);
+    }
+  }
+
+  async function votePoll(p, option) {
+    try {
+      ({ polls } = await api.vote(p.id, option));
+      buzz(8);
+      renderPolls();
+      if (option == null) toast('Голос знято');
+    } catch {
+      toast('Не вдалося проголосувати. Спробуй ще раз.');
+    }
+  }
+
+  // видалення в два натискання, бо confirm() на телефонах незручний
+  async function deletePoll(p, btn) {
+    if (!btn.dataset.sure) {
+      btn.dataset.sure = '1';
+      btn.textContent = 'Точно видалити? Натисни ще раз';
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.sure; btn.textContent = 'Видалити опитування'; } }, 4000);
+      return;
+    }
+    try {
+      ({ polls } = await api.deletePoll(p.id));
+      renderPolls();
+      toast('Опитування видалено');
+    } catch {
+      toast('Не вдалося видалити. Спробуй ще раз.');
+    }
+  }
+
+  function pollInput(value = '') {
+    const box = $('poll-inputs'), n = box.children.length + 1;
+    const input = h('input');
+    input.id = `poll-opt-${n}`;
+    input.maxLength = 60;
+    input.placeholder = `Варіант ${n}`;
+    input.value = value;
+    box.append(input);
+    $('poll-add').hidden = box.children.length >= 6;
+    return input;
+  }
+  $('poll-new').addEventListener('click', () => {
+    $('poll-q').value = '';
+    $('poll-inputs').textContent = '';
+    pollInput();
+    pollInput();
+    const name = store.get('name', '');
+    $('poll-name').value = name;
+    $('poll-name-field').hidden = !!name;
+    $('poll-error').textContent = '';
+    $('scrim').hidden = false;
+    $('poll-sheet').hidden = false;
+    setTimeout(() => $('poll-q').focus(), 250);
+  });
+  $('poll-add').addEventListener('click', () => pollInput().focus());
+  $('poll-cancel').addEventListener('click', () => closeSheet());
+  $('poll-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const q = $('poll-q').value.trim();
+    const options = [...$('poll-inputs').querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean);
+    const name = $('poll-name').value.trim().replace(/\s+/g, ' ');
+    const err = msg => { $('poll-error').textContent = msg; };
+    if (q.length < 3) return err('Напиши питання.');
+    if (options.length < 2) return err('Потрібно хоча б два варіанти.');
+    if (new Set(options).size !== options.length) return err('Варіанти не мають повторюватися.');
+    if (name.length < 2) { $('poll-name-field').hidden = false; return err('Напиши своє імʼя.'); }
+    store.set('name', name);
+    $('poll-save').disabled = true;
+    try {
+      ({ polls } = await api.createPoll(q, options, name));
+      closeSheet();
+      renderPolls();
+      toast('Опитування створено');
+    } catch (e2) {
+      err(e2.code === 'limit' ? 'Можна мати до 3 опитувань одночасно. Видали старе.' : 'Не вдалося створити. Перевір інтернет і спробуй ще раз.');
+    } finally {
+      $('poll-save').disabled = false;
+    }
+  });
 
   // ---------- розклад ----------
   let weekSel = null;
@@ -722,8 +953,17 @@
   }
 
   // ---------- вкладки ----------
-  const TABS = ['desks', 'week', 'hw', 'bells'];
+  const TABS = ['desks', 'week', 'hw', 'polls'];
+  function showView(view) {
+    for (const b of document.querySelectorAll('.seg-ctl button')) b.setAttribute('aria-checked', String(b.dataset.view === view));
+    $('view-lessons').hidden = view !== 'lessons';
+    $('view-bells').hidden = view !== 'bells';
+    store.set('view', view);
+  }
+  document.querySelectorAll('.seg-ctl button').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
   function showTab(name) {
+    // дзвінки тепер усередині «Розкладу»
+    if (name === 'bells') { showView('bells'); name = 'week'; }
     if (!TABS.includes(name)) name = 'desks';
     for (const t of TABS) {
       $(`tab-${t}`).setAttribute('aria-selected', String(t === name));
@@ -806,6 +1046,7 @@
   applyTheme(store.get('theme', 'auto'));
   $('year').textContent = C.year;
   $('rules').append(...C.rules.map(r => h('li', '', r)));
+  showView(store.get('view', 'lessons'));
   showTab(location.hash.slice(1) || store.get('tab', 'desks'));
   tick();
   setInterval(tick, 1000);
