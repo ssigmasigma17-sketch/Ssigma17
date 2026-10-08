@@ -10,4 +10,4 @@
 3. **Deploy**. Адреса буде `https://class-8b.<твій-субдомен>.workers.dev`.
 4. Вписати цю адресу в `8b/data.js` на гілці `gh-pages`: `api: 'https://class-8b.….workers.dev'`.
 
-API — див. коментар на початку `worker.js`.
+API — див. коментар на початку `worker.js`. Ім’я Worker у Cloudflare має збігатися з `name` у `wrangler.toml` (`class-8b`).
