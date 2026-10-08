@@ -12,6 +12,7 @@
 //   POST /api/polls/delete  { id }                       автор або староста
 //   POST /api/chat          { text, name }
 //   POST /api/chat/delete   { id }                       автор або староста
+//   POST /api/chat/react    { id, emoji }                поставити / зняти реакцію (👍 😂 ❤️ 🔥)
 //   GET  /api/admin                                      { admin } — чи правильний код старости
 //   POST /api/admin/release { date, seat }               староста знімає будь-яку бронь
 //   POST /api/admin/hw-history-clear { date, lesson }
@@ -31,6 +32,7 @@ const POLL_DAYS = 14;        // опитування видно 2 тижні
 const POLLS_PER_PERSON = 3;  // відкритих опитувань від однієї людини
 const CHAT_DAYS = 7;         // повідомлення видно тиждень
 const CHAT_PAGE = 100;
+const REACTIONS = ['👍', '😂', '❤️', '🔥'];
 
 // Обмеження частоти записів, щоб один скрипт не забив сайт і безкоштовний ліміт Cloudflare.
 const LIMITS = {
@@ -101,6 +103,8 @@ export class Board extends DurableObject {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS chat (
       id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, by TEXT NOT NULL, owner TEXT NOT NULL, at INTEGER NOT NULL)`);
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)');
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS reactions (
+      msg INTEGER NOT NULL, owner TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (msg, owner, emoji))`);
     // колись бронювали окремі місця («1-2-L»); тепер — цілі парти
     this.sql.exec("DELETE FROM bookings WHERE seat LIKE '%-L' OR seat LIKE '%-R'");
     this.hits = new Map();
@@ -188,7 +192,19 @@ export class Board extends DurableObject {
     const rows = full
       ? this.sql.exec('SELECT id, text, by, owner, at FROM chat WHERE at >= ? ORDER BY id DESC LIMIT ?', since, CHAT_PAGE).toArray().reverse()
       : this.sql.exec('SELECT id, text, by, owner, at FROM chat WHERE id > ? ORDER BY id LIMIT ?', after, CHAT_PAGE).toArray();
-    return { rev: cur, full, msgs: rows.map(m => ({ id: m.id, text: m.text, by: shortName(m.by), at: m.at, own: m.owner === owner })) };
+    const react = {};
+    if (rows.length) {
+      for (const r of this.sql.exec('SELECT msg, owner, emoji FROM reactions WHERE msg >= ?', rows[0].id)) {
+        const e = ((react[r.msg] ||= {})[r.emoji] ||= { n: 0, mine: false });
+        e.n++;
+        if (r.owner === owner) e.mine = true;
+      }
+    }
+    return { rev: cur, full, msgs: rows.map(m => ({ id: m.id, text: m.text, by: shortName(m.by), at: m.at, own: m.owner === owner, re: react[m.id] || {} })) };
+  }
+
+  bumpChat() {
+    this.sql.exec("INSERT INTO meta (key, value) VALUES ('chat_rev', 1) ON CONFLICT (key) DO UPDATE SET value = value + 1");
   }
 
   // ---------- записи (усі проходять через обмеження частоти) ----------
@@ -266,7 +282,17 @@ export class Board extends DurableObject {
         if (!m) return { error: 'msg' };
         if (m.owner !== owner && !who.admin) return { error: 'owner' };
         this.sql.exec('DELETE FROM chat WHERE id = ?', a.id);
-        this.sql.exec("INSERT INTO meta (key, value) VALUES ('chat_rev', 1) ON CONFLICT (key) DO UPDATE SET value = value + 1");
+        this.sql.exec('DELETE FROM reactions WHERE msg = ?', a.id);
+        this.bumpChat();
+        return { ok: true };
+      }
+      case 'react': {
+        if (!this.sql.exec('SELECT id FROM chat WHERE id = ?', a.id).toArray().length) return { error: 'msg' };
+        const had = this.sql.exec('SELECT 1 FROM reactions WHERE msg = ? AND owner = ? AND emoji = ?', a.id, owner, a.emoji).toArray().length;
+        if (had) this.sql.exec('DELETE FROM reactions WHERE msg = ? AND owner = ? AND emoji = ?', a.id, owner, a.emoji);
+        else this.sql.exec('INSERT INTO reactions (msg, owner, emoji) VALUES (?, ?, ?)', a.id, owner, a.emoji);
+        // реакції змінюють старі повідомлення — сторінки перечитають чат повністю
+        this.bumpChat();
         return { ok: true };
       }
     }
@@ -281,6 +307,7 @@ export class Board extends DurableObject {
     const oldPolls = Date.now() - 60 * DAY;
     this.sql.exec('DELETE FROM votes WHERE poll IN (SELECT id FROM polls WHERE at < ?)', oldPolls);
     this.sql.exec('DELETE FROM polls WHERE at < ?', oldPolls);
+    this.sql.exec('DELETE FROM reactions WHERE msg IN (SELECT id FROM chat WHERE at < ?)', Date.now() - CHAT_DAYS * DAY);
     this.sql.exec('DELETE FROM chat WHERE at < ?', Date.now() - CHAT_DAYS * DAY);
   }
 }
@@ -389,6 +416,9 @@ export default {
       }
       case '/api/chat/delete':
         return act('chatDelete', { id: Number(body.id) });
+      case '/api/chat/react':
+        if (!REACTIONS.includes(body.emoji)) return fail('emoji');
+        return act('react', { id: Number(body.id), emoji: body.emoji });
     }
     return fail('not_found', 404);
   },
