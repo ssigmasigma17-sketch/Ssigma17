@@ -11,3 +11,6 @@ class_name = "Board"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Board"]
+
+# Пробні збірки з інших гілок (npx wrangler preview) вимагають цей блок, хай і порожній.
+[previews]
