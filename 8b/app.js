@@ -307,6 +307,7 @@
       const [r, w] = await Promise.all([api.days(bookDates), api.hw(week[0], addDays(week[0], 20))]);
       data = r.days;
       hw = w.hw;
+      if (!lastSync && C.api) $('demo').hidden = true;
       lastSync = Date.now();
     } catch (e) {
       // сервер не вказано і на цьому ж сайті його немає (GitHub Pages, локальний файл) — демо
@@ -314,6 +315,12 @@
         api = demo;
         $('demo').hidden = false;
         return refresh();
+      }
+      if (C.api && !lastSync) {
+        $('demo').textContent = 'Не вдається зʼєднатися із сервером броней. Перевір інтернет або спробуй пізніше.';
+        $('demo').hidden = false;
+        renderRoom();
+        renderHwPanel();
       }
       $('sync').textContent = 'немає звʼязку';
       $('sync').classList.add('off');

@@ -11,7 +11,7 @@ window.CLASS = {
 
   // Адреса сервера броней (Cloudflare Worker з src/worker.js), напр. 'https://class-8b.xxx.workers.dev'.
   // Порожньо — сервер на тому ж сайті. Без сервера сайт працює в демо-режимі.
-  api: '',
+  api: 'https://class-8b.ponapon309.workers.dev',
 
   // [початок, кінець] уроків 1–12
   bells: [
