@@ -130,6 +130,20 @@ const siteButton = type => ({
 const send = (env, chat, text, extra = {}) =>
   tg(env, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...extra });
 
+// Меню бота: лише кнопка «8-Б» біля поля вводу, що відкриває сайт усередині Telegram.
+// Списку команд у меню немає (команди все одно працюють, якщо їх написати).
+const MENU_VERSION = 'menu-v3';
+async function setMenu(env) {
+  const a = await tg(env, 'deleteMyCommands', {});
+  const b = await tg(env, 'setChatMenuButton', { menu_button: { type: 'web_app', text: 'Відкрити 8-Б', web_app: { url: SITE } } });
+  return a.ok && b.ok;
+}
+// після деплою нове меню ставиться саме — з першим повідомленням боту або з найближчим годинним будильником
+async function ensureMenu(env, board) {
+  if (await board.tgFlag(MENU_VERSION)) return;
+  if (await setMenu(env)) await board.tgFlag(MENU_VERSION, true); // не вдалося — спробуємо наступного разу
+}
+
 // Підключення бота: вебхук на цей Worker, захищений секретом, і меню команд. Викликає староста з сайту.
 export async function tgSetup(env, origin) {
   if (!env.TG_TOKEN) return { error: 'no_token' };
@@ -139,9 +153,7 @@ export async function tgSetup(env, origin) {
     url: `${origin}/tg`, secret_token: await tgSecret(env), allowed_updates: ['message'], drop_pending_updates: true,
   });
   if (!hook.ok) return { error: 'webhook', detail: hook.description };
-  await tg(env, 'setMyCommands', { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
-  // кнопка «8-Б» біля поля вводу — відкриває сайт усередині Telegram
-  await tg(env, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '8-Б', web_app: { url: SITE } } });
+  await setMenu(env);
   return { ok: true, username: me.result.username };
 }
 
@@ -164,6 +176,7 @@ export async function handleTg(request, env, board) {
   if (!env.TG_TOKEN || request.headers.get('x-telegram-bot-api-secret-token') !== (await tgSecret(env))) {
     return new Response('forbidden', { status: 403 });
   }
+  await ensureMenu(env, board);
   const update = await request.json().catch(() => ({}));
   const m = update.message;
   if (!m?.text || !m.text.startsWith('/')) return new Response('ok');
@@ -223,6 +236,7 @@ export async function handleTg(request, env, board) {
 // Нагадування: будильник сервера (worker.js, Board.alarm) будить бота щогодини, а надсилаємо лише о 7:00 чи 19:00 за Києвом.
 export async function tgDaily(env, board) {
   if (!env.TG_TOKEN) return;
+  await ensureMenu(env, board);
   const now = kyivNow(), hour = env.TG_TEST_HOUR ? +env.TG_TEST_HOUR : now.hour;
   if (hour !== 7 && hour !== 19) return;
   const C = await schedule(env);

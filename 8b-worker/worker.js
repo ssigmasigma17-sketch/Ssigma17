@@ -382,6 +382,12 @@ export class Board extends DurableObject {
     return this.sql.exec('SELECT chat FROM tg_chats').toArray().map(r => r.chat);
   }
   // true лише для першого виклику з цим ключем: одне нагадування на годину, навіть якщо будильник спрацює двічі
+  // одноразові дії (напр. оновити меню бота після деплою): прочитати прапорець або позначити як зроблене
+  async tgFlag(key, done = false) {
+    if (done) { await this.ctx.storage.put(`flag:${key}`, 1); return true; }
+    return !!(await this.ctx.storage.get(`flag:${key}`));
+  }
+
   async tgOnce(key) {
     if ((await this.ctx.storage.get('tgLast')) === key) return false;
     await this.ctx.storage.put('tgLast', key);
