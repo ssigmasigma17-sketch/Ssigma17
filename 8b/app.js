@@ -255,16 +255,24 @@
     async req(path, body) {
       const headers = { 'content-type': 'application/json', 'x-token': token };
       if (adminKey) headers['x-admin'] = adminKey;
-      const r = await fetch((C.api || '').replace(/\/$/, '') + path, {
-        method: body ? 'POST' : 'GET',
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        cache: 'no-store',
-      });
+      // не чекаємо відповіді вічно: за 25 с запит скасовується
+      let r;
+      try {
+        r = await fetch((C.api || '').replace(/\/$/, '') + path, {
+          method: body ? 'POST' : 'GET',
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          cache: 'no-store',
+          signal: AbortSignal.timeout(25000),
+        });
+      } catch (e) {
+        if (e.name === 'TimeoutError') throw Object.assign(new Error('timeout'), { code: 'timeout' });
+        throw e;
+      }
       const ct = r.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) throw Object.assign(new Error('no api'), { noApi: true });
+      if (!ct.includes('application/json')) throw Object.assign(new Error('no api'), { noApi: true, status: r.status });
       const data = await r.json();
-      if (!r.ok) throw Object.assign(new Error(data.error || 'error'), { code: data.code });
+      if (!r.ok) throw Object.assign(new Error(data.error || 'error'), { code: data.code, detail: data.detail });
       return data;
     },
     sync: q => server.req(`/api/sync?dates=${q.dates.join(',')}&from=${q.from}&to=${q.to}&chat=${q.chat}&rev=${q.rev}`),
@@ -283,6 +291,7 @@
     adminBook: (date, slots, seat, name) => server.req('/api/admin/book', { date, slots, seat, name }),
     adminLog: () => server.req('/api/admin/log'),
     tgSetup: () => server.req('/api/admin/tg-setup', {}),
+    tgStatus: () => server.req('/api/admin/tg-status'),
     hwHistoryClear: (date, lesson) => server.req('/api/admin/hw-history-clear', { date, lesson }),
   };
 
@@ -1300,7 +1309,9 @@
     list.textContent = '';
     list.hidden = !isAdmin;
     $('tg-setup').hidden = !isAdmin;
+    $('tg-status').hidden = !isAdmin;
     if (!isAdmin) return;
+    loadTgStatus();
     try {
       const { log } = await api.adminLog();
       if (!log.length) list.append(h('li', 'muted', 'Поки нічого.'));
@@ -1325,18 +1336,39 @@
   }
   $('admin-exit').addEventListener('click', exitAdmin);
   // Telegram-бот: сервер сам прописує вебхук і меню команд, якщо в Cloudflare є секрет TG_TOKEN
+  async function loadTgStatus() {
+    const el = $('tg-status');
+    el.textContent = 'Бот: перевіряю…';
+    try {
+      const r = await api.tgStatus();
+      el.textContent = !r.token ? 'Бот: у Cloudflare немає секрету TG_TOKEN.'
+        : !r.ok ? `Бот: Telegram не відповідає (${r.detail || 'невідома помилка'}).`
+        : r.hooked ? `Бот @${r.username} підключено.${r.lastError ? ` Остання помилка Telegram: ${r.lastError}.` : ''}`
+        : `Бот @${r.username} знайдено, але ще не підключено — натисни кнопку.`;
+    } catch (e) {
+      el.textContent = e.code === 'timeout' ? 'Бот: сервер не відповів за 25 с.' : 'Бот: не вдалося перевірити стан.';
+    }
+  }
   $('tg-setup').addEventListener('click', async () => {
-    $('tg-setup').disabled = true;
+    const btn = $('tg-setup'), label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Підключаю…';
+    $('admin-error').textContent = '';
     try {
       const r = await api.tgSetup();
-      $('admin-error').textContent = '';
       toast(`Бот @${r.username} підключено`);
     } catch (e) {
+      const why = e.detail ? ` (${e.detail})` : '';
       $('admin-error').textContent = e.code === 'no_token' ? 'Спершу додай секрет TG_TOKEN у Cloudflare.'
-        : e.code === 'bad_token' ? 'Telegram не прийняв токен. Перевір TG_TOKEN у Cloudflare.'
-        : 'Не вдалося підключити бота. Спробуй ще раз.';
+        : e.code === 'bad_token' ? `Telegram не прийняв токен${why}. Перевір TG_TOKEN у Cloudflare.`
+        : e.code === 'unreachable' ? `Сервер не достукався до Telegram${why}.`
+        : e.code === 'webhook' ? `Telegram не прийняв адресу бота${why}.`
+        : e.code === 'timeout' ? 'Сервер не відповів за 25 с. Спробуй ще раз.'
+        : `Не вдалося підключити бота${e.status ? ` (HTTP ${e.status})` : ''}. Спробуй ще раз.`;
     } finally {
-      $('tg-setup').disabled = false;
+      btn.disabled = false;
+      btn.textContent = label;
+      loadTgStatus();
     }
   });
   $('admin-close').addEventListener('click', () => closeSheet());
