@@ -46,6 +46,11 @@
   const longDate = date => `${dayNum(date)} ${MONTHS[+date.slice(5, 7) - 1]}`;
 
   const lessonsOf = dow => (dow >= 1 && dow <= 5 ? C.week[dow - 1] : null);
+  // тижні чергуються: 0 — 1-й тиждень, 1 — 2-й (від понеділка C.altStart)
+  const weekNo = date => ((Math.floor((utc(date) - utc(C.altStart)) / 864e5 / 7) % 2) + 2) % 2;
+  const resolve = (l, date) => (l && l.alt ? l.alt[weekNo(date)] : l);
+  // уроки конкретного дня, з урахуванням предметів, що чергуються
+  const lessonsOn = date => { const L = lessonsOf(dowOf(date)); return L && L.map(l => resolve(l, date)); };
   const span = L => {
     const idx = L.map((l, i) => (l ? i : -1)).filter(i => i >= 0);
     return { first: idx[0], last: idx[idx.length - 1], count: idx.length };
@@ -69,7 +74,7 @@
 
   // ---------- що зараз ----------
   function status(now) {
-    const L = lessonsOf(now.dow);
+    const L = lessonsOn(now.date);
     if (L) {
       const { first, last, count } = span(L);
       if (now.min < BELLS[first][0]) {
@@ -100,7 +105,7 @@
         }
       }
     }
-    const nd = nextSchoolDay(now.date), NL = lessonsOf(dowOf(nd)), { first } = span(NL);
+    const nd = nextSchoolDay(now.date), NL = lessonsOn(nd), { first } = span(NL);
     const when = nd === addDays(now.date, 1) ? 'завтра' : DOW_ON[dowOf(nd)];
     const left = (utc(nd) - utc(now.date)) / 864e5 * 1440 + BELLS[first][0] - now.min;
     return {
@@ -122,6 +127,7 @@
     'Англійська мова': 'Англ', 'Українська мова': 'Укр', 'Українська література': 'Укр л', 'Зарубіжна література': 'Зар л',
     'Фізкультура': 'Фізра', 'Інформатика': 'Інф', 'Геометрія': 'Геом', 'Алгебра': 'Алг', 'Історія': 'Іст', 'Біологія': 'Біо',
     'Географія': 'Геогр', 'Хімія': 'Хім', 'Фізика': 'Фіз', 'Технології': 'Техн', 'Світ професій': 'Проф', 'ІК «Мистецтво»': 'Мист',
+    'ІК «Здоров’я, безпека та добробут»': 'ЗБД', 'Підприємництво і фінансова грамотність': 'Фін', 'Громадянська освіта': 'Гром',
   };
   const shortOf = l => (l.s ? SHORT[l.s] || l.s.slice(0, 4) : 'A / B');
   const dur = m => {
@@ -134,7 +140,7 @@
   let strip = null;
 
   function renderStrip(now) {
-    const date = stripDay(now), L = lessonsOf(dowOf(date)), { first, last, count } = span(L);
+    const date = stripDay(now), L = lessonsOn(date), { first, last, count } = span(L);
     const t0 = BELLS[first][0], t1 = BELLS[last][1], pct = m => `${((m - t0) / (t1 - t0)) * 100}%`;
     const when = date === now.date ? 'Сьогодні' : date === addDays(now.date, 1) ? 'Завтра' : cap(DOW[dowOf(date)]);
     $('strip-title').textContent = `${when} · ${count} ${plural(count, 'урок', 'уроки', 'уроків')}`;
@@ -461,7 +467,7 @@
     const chips = $('hw-days'), today = kyivNow().date;
     chips.textContent = '';
     for (const d of hwDates) {
-      const b = h('button', 'day'), n = hwCount(d), L = lessonsOf(dowOf(d));
+      const b = h('button', 'day'), n = hwCount(d), L = lessonsOn(d);
       b.type = 'button';
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(d === hwSel));
@@ -474,7 +480,7 @@
       b.onclick = () => { hwSel = d; renderHwPanel(); };
       chips.append(b);
     }
-    const L = lessonsOf(dowOf(hwSel)), n = hwCount(hwSel), total = span(L).count, dn = doneCount(hwSel);
+    const L = lessonsOn(hwSel), n = hwCount(hwSel), total = span(L).count, dn = doneCount(hwSel);
     $('hw-day').textContent = `${cap(DOW[dowOf(hwSel)])}, ${longDate(hwSel)}`;
     $('hw-tally').innerHTML = n && dn ? `<b>${dn}/${n}</b>зроблено` : `<b>${n}</b>записано з ${total}`;
     const list = $('hw-list');
@@ -510,7 +516,7 @@
 
   let hwOpen = null;
   function openHw(date, n) {
-    const L = lessonsOf(dowOf(date)), l = L && L[n];
+    const L = lessonsOn(date), l = L && L[n];
     if (!l) return;
     hwOpen = { date, n };
     const item = hw[hwKey(date, n)], name = store.get('name', '');
@@ -1232,7 +1238,7 @@
       chip.onclick = () => { weekSel = date; renderWeek(kyivNow(), status(kyivNow())); };
       chips.append(chip);
 
-      const L = C.week[i], { first, last, count } = span(L);
+      const raw = C.week[i], L = lessonsOn(date), { first, last, count } = span(L);
       const col = h('div', `wday${isToday ? ' is-today' : ''}${date === weekSel ? ' shown' : ''}`);
       const head = h('div', 'wday-head');
       head.append(h('span', 'wday-name', `${cap(DOW[i + 1])}, ${dayNum(date)}`), h('span', 'wday-meta', `${count} ${plural(count, 'урок', 'уроки', 'уроків')}`));
@@ -1263,6 +1269,7 @@
           } else {
             body.append(meta(time, l.t, l.r));
           }
+          if (raw[n].alt) body.append(h('div', 'alt-note', `наступного тижня — ${subjOf(raw[n].alt[1 - weekNo(date)])}`));
           const item = hw[hwKey(date, n)];
           if (item) body.append(h('div', `hw-text${isDone(hwKey(date, n)) ? ' is-done' : ''}`, item.text));
           row.onclick = () => openHw(date, n);
