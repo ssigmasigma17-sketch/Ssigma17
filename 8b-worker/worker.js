@@ -21,6 +21,8 @@
 //   POST /api/admin/book    { date, slots, seat, name }  староста або помічник бронює парту для когось іще (скільки завгодно парт,
 //                                                        і на сьогодні теж)
 //   GET  /api/admin/log                                  останні дії старости
+//   POST /api/admin/tg-setup                             підключити Telegram-бота (вебхук і меню команд), див. bot.js
+//   POST /tg                                             вебхук Telegram (перевіряється секретом)
 //   POST /api/admin/hw-history-clear { date, lesson }
 //
 // Хто є хто — випадковий токен пристрою в заголовку x-token; у базі лежить лише його SHA-256.
@@ -28,6 +30,7 @@
 // сервер перестає перевіряти коди з неї. Усі дії старости пишуться в журнал.
 // Імена назовні віддаються скорочено: «Нестор Гуцалік» → «Нестор Г.».
 import { DurableObject } from 'cloudflare:workers';
+import { handleTg, tgSetup, tgDaily } from './bot.js';
 
 const ADMIN_HASH = '4623f62e26392e64161401c7820a182bf8550b0dcf6fb7cd1e57a31cb683aea2';
 // Код помічника: уміє лише бронювати парти для інших (/api/admin/book), більше нічого.
@@ -123,6 +126,7 @@ export class Board extends DurableObject {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reactions (
       msg INTEGER NOT NULL, owner TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (msg, owner, emoji))`);
     this.sql.exec('CREATE TABLE IF NOT EXISTS admin_log (at INTEGER NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS tg_chats (chat INTEGER PRIMARY KEY, title TEXT NOT NULL, added INTEGER NOT NULL)');
     // броні по уроках: на кожен урок своя парта
     this.sql.exec(`CREATE TABLE IF NOT EXISTS desk_bookings (
       date TEXT NOT NULL, slot TEXT NOT NULL, seat TEXT NOT NULL, name TEXT NOT NULL, owner TEXT NOT NULL, created INTEGER NOT NULL,
@@ -346,6 +350,22 @@ export class Board extends DurableObject {
     return { error: 'not_found' };
   }
 
+  // ---------- Telegram: чати, підписані на нагадування ----------
+  tgSubscribe(chat, title, max) {
+    const n = this.sql.exec('SELECT COUNT(*) AS n FROM tg_chats').one().n;
+    const has = this.sql.exec('SELECT 1 FROM tg_chats WHERE chat = ?', chat).toArray().length;
+    if (!has && n >= max) return { error: 'limit' };
+    this.sql.exec('INSERT INTO tg_chats (chat, title, added) VALUES (?, ?, ?) ON CONFLICT (chat) DO UPDATE SET title = excluded.title',
+      chat, String(title).slice(0, 64), Date.now());
+    return { ok: true };
+  }
+  tgUnsubscribe(chat) {
+    this.sql.exec('DELETE FROM tg_chats WHERE chat = ?', chat);
+  }
+  tgChats() {
+    return this.sql.exec('SELECT chat FROM tg_chats').toArray().map(r => r.chat);
+  }
+
   log(action, detail) {
     this.sql.exec('INSERT INTO admin_log (at, action, detail) VALUES (?, ?, ?)', Date.now(), action, detail);
   }
@@ -392,7 +412,13 @@ function adminFailed(ip) {
   e.n++;
 }
 
+const boardOf = env => env.BOARD.get(env.BOARD.idFromName('8b'));
+
 export default {
+  // нагадування Telegram-бота: cron у wrangler.toml
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(tgDaily(env, boardOf(env)));
+  },
   async fetch(request, env) {
     const res = await handle(request, env);
     // браузерам дозволяємо читати відповіді лише на сторінці класу
@@ -408,6 +434,7 @@ export default {
 async function handle(request, env) {
   {
     const url = new URL(request.url);
+    if (url.pathname === '/tg' && request.method === 'POST') return handleTg(request, env, boardOf(env));
     if (!url.pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(request) : fail('not_found', 404);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
@@ -475,6 +502,11 @@ async function handle(request, env) {
         if (!releasable(date)) return fail('date');
         if (!slots) return fail('seat');
         return act('release', { date, slots });
+      }
+      case '/api/admin/tg-setup': {
+        if (!who.admin) return fail('admin', 403);
+        const r = await tgSetup(env, url.origin);
+        return r.error ? fail(r.error) : json(r);
       }
       case '/api/admin/book': {
         const seat = String(body.seat || ''), slots = slotList(body.slots);
