@@ -351,19 +351,40 @@ export class Board extends DurableObject {
   }
 
   // ---------- Telegram: чати, підписані на нагадування ----------
-  tgSubscribe(chat, title, max) {
+  async tgSubscribe(chat, title, max) {
     const n = this.sql.exec('SELECT COUNT(*) AS n FROM tg_chats').one().n;
     const has = this.sql.exec('SELECT 1 FROM tg_chats WHERE chat = ?', chat).toArray().length;
     if (!has && n >= max) return { error: 'limit' };
     this.sql.exec('INSERT INTO tg_chats (chat, title, added) VALUES (?, ?, ?) ON CONFLICT (chat) DO UPDATE SET title = excluded.title',
       chat, String(title).slice(0, 64), Date.now());
+    await this.tgAlarm();
     return { ok: true };
+  }
+  // Будильник замість cron: щогодини на початку години, а бот надсилає лише о 7:00 і 19:00 за Києвом.
+  // TG_ALARM_MS (необовʼязково) — інший інтервал для перевірки.
+  async tgAlarm() {
+    if (await this.ctx.storage.getAlarm()) return;
+    const every = +this.env.TG_ALARM_MS || 3600e3;
+    await this.ctx.storage.setAlarm(Math.ceil((Date.now() + 1000) / every) * every + 5000);
+  }
+  async alarm() {
+    try {
+      if (this.tgChats().length) await tgDaily(this.env, this);
+    } finally {
+      if (this.tgChats().length) await this.tgAlarm();
+    }
   }
   tgUnsubscribe(chat) {
     this.sql.exec('DELETE FROM tg_chats WHERE chat = ?', chat);
   }
   tgChats() {
     return this.sql.exec('SELECT chat FROM tg_chats').toArray().map(r => r.chat);
+  }
+  // true лише для першого виклику з цим ключем: одне нагадування на годину, навіть якщо будильник спрацює двічі
+  async tgOnce(key) {
+    if ((await this.ctx.storage.get('tgLast')) === key) return false;
+    await this.ctx.storage.put('tgLast', key);
+    return true;
   }
 
   log(action, detail) {
@@ -415,10 +436,6 @@ function adminFailed(ip) {
 const boardOf = env => env.BOARD.get(env.BOARD.idFromName('8b'));
 
 export default {
-  // нагадування Telegram-бота: cron у wrangler.toml
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(tgDaily(env, boardOf(env)));
-  },
   async fetch(request, env) {
     const res = await handle(request, env);
     // браузерам дозволяємо читати відповіді лише на сторінці класу

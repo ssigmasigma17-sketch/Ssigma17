@@ -1,5 +1,5 @@
 // Telegram-бот класу 8-Б. Живе в тому самому Worker: Telegram надсилає повідомлення на /tg (вебхук),
-// а вранці й увечері cron розсилає нагадування в підписані чати.
+// а вранці й увечері будильник сервера розсилає нагадування в підписані чати.
 // Токен бота — секрет TG_TOKEN у Cloudflare. Розклад бот бере з schedule.json на сайті.
 // Для перевірки без справжнього Telegram: TG_API підміняє адресу Telegram API, SCHEDULE_URL — адресу розкладу,
 // TG_TEST_HOUR — годину для нагадувань.
@@ -194,7 +194,7 @@ export async function handleTg(request, env, board) {
   return new Response('ok');
 }
 
-// Нагадування: cron запускається двічі (взимку й улітку різниця з UTC різна), а надсилаємо лише о 7:00 чи 19:00 за Києвом.
+// Нагадування: будильник сервера (worker.js, Board.alarm) будить бота щогодини, а надсилаємо лише о 7:00 чи 19:00 за Києвом.
 export async function tgDaily(env, board) {
   if (!env.TG_TOKEN) return;
   const now = kyivNow(), hour = env.TG_TEST_HOUR ? +env.TG_TEST_HOUR : now.hour;
@@ -209,6 +209,7 @@ export async function tgDaily(env, board) {
     if (!lessonsOn(C, d)) return;
     text = dayText(C, d, await board.hw(d, d), 'На завтра');
   }
+  if (!(await board.tgOnce(`${now.date} ${hour}`))) return;
   for (const chat of await board.tgChats()) {
     const r = await send(env, chat, text);
     // бота видалили з чату або заблокували — більше туди не пишемо
