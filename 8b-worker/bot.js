@@ -122,7 +122,11 @@ async function tg(env, method, body) {
     return { ok: false, error_code: 0, description: e.name === 'TimeoutError' ? 'Telegram не відповів за 10 с' : String(e.message || e) };
   }
 }
-const siteButton = { reply_markup: { inline_keyboard: [[{ text: 'Відкрити сайт 8-Б', url: SITE }]] } };
+// В особистому чаті кнопка відкриває сайт як міні-застосунок усередині Telegram;
+// у групах Telegram такого не дозволяє — там звичайне посилання.
+const siteButton = type => ({
+  reply_markup: { inline_keyboard: [[type === 'private' ? { text: 'Відкрити 8-Б', web_app: { url: SITE } } : { text: 'Відкрити сайт 8-Б', url: SITE }]] },
+});
 const send = (env, chat, text, extra = {}) =>
   tg(env, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...extra });
 
@@ -136,6 +140,8 @@ export async function tgSetup(env, origin) {
   });
   if (!hook.ok) return { error: 'webhook', detail: hook.description };
   await tg(env, 'setMyCommands', { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
+  // кнопка «8-Б» біля поля вводу — відкриває сайт усередині Telegram
+  await tg(env, 'setChatMenuButton', { menu_button: { type: 'web_app', text: '8-Б', web_app: { url: SITE } } });
   return { ok: true, username: me.result.username };
 }
 
@@ -168,7 +174,7 @@ export async function handleTg(request, env, board) {
     switch (cmd) {
       case 'start':
       case 'help':
-        await send(env, chat, HELP, siteButton);
+        await send(env, chat, HELP, siteButton(m.chat.type));
         break;
       case 'now':
         await send(env, chat, nowText(C));
@@ -178,7 +184,7 @@ export async function handleTg(request, env, board) {
         break;
       case 'tomorrow': {
         const d = nextSchoolDay(C, now.date);
-        await send(env, chat, dayText(C, d, await board.hw(d, d), d === addDays(now.date, 1) ? 'Завтра' : 'Наступний навчальний день'), siteButton);
+        await send(env, chat, dayText(C, d, await board.hw(d, d), d === addDays(now.date, 1) ? 'Завтра' : 'Наступний навчальний день'), siteButton(m.chat.type));
         break;
       }
       case 'hw': {
@@ -190,7 +196,7 @@ export async function handleTg(request, env, board) {
         const text = items.length
           ? [`<b>Домашка</b> — ${esc(longDate(d))}`, ...items.sort().map(([k, v]) => `${esc(subj(LL[+k.split('|')[1] - 1] || { s: 'Урок ' + k.split('|')[1] }))}: ${esc(v.text)}`)].join('\n')
           : `На ${esc(longDate(d))} домашки ще ніхто не записав.`;
-        await send(env, chat, text, siteButton);
+        await send(env, chat, text, siteButton(m.chat.type));
         break;
       }
       case 'bells':
@@ -206,7 +212,7 @@ export async function handleTg(request, env, board) {
         await send(env, chat, 'Нагадування вимкнено.');
         break;
       default:
-        if (m.chat.type === 'private') await send(env, chat, HELP, siteButton);
+        if (m.chat.type === 'private') await send(env, chat, HELP, siteButton(m.chat.type));
     }
   } catch (e) {
     await send(env, chat, 'Щось пішло не так, спробуй трохи пізніше.');
