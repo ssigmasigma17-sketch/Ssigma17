@@ -16,9 +16,9 @@
 //   POST /api/chat          { text, name }
 //   POST /api/chat/delete   { id }                       автор або староста
 //   POST /api/chat/react    { id, emoji }                поставити / зняти реакцію (👍 😂 ❤️ 🔥)
-//   GET  /api/admin                                      { admin } — чи правильний код старости
+//   GET  /api/admin                                      { admin, booker } — чий це код: старости чи помічника
 //   POST /api/admin/release { date, slot, seat }         староста знімає будь-яку бронь
-//   POST /api/admin/book    { date, slots, seat, name }  староста бронює парту для когось іще (скільки завгодно парт,
+//   POST /api/admin/book    { date, slots, seat, name }  староста або помічник бронює парту для когось іще (скільки завгодно парт,
 //                                                        і на сьогодні теж)
 //   GET  /api/admin/log                                  останні дії старости
 //   POST /api/admin/hw-history-clear { date, lesson }
@@ -30,6 +30,8 @@
 import { DurableObject } from 'cloudflare:workers';
 
 const ADMIN_HASH = '4623f62e26392e64161401c7820a182bf8550b0dcf6fb7cd1e57a31cb683aea2';
+// Код помічника: уміє лише бронювати парти для інших (/api/admin/book), більше нічого.
+const BOOKER_HASH = '15504a04db49c5fce0890e590911dfcc6f193214491d2df8036094647d6cc474';
 // Парта — «ряд-парта». У різних кабінетах різна кількість рядів і парт, точний план знає сторінка,
 // сервер лише не пускає неможливе: до 4 рядів, до 6 парт у ряду.
 const SEAT = /^[1-4]-[1-6]$/;
@@ -256,8 +258,9 @@ export class Board extends DurableObject {
         return { day: this.day(a.date, owner) };
       }
       case 'adminBook': {
-        // бронь від імені старости для когось іще: окремий «власник» на кожну бронь, тож парт може бути скільки завгодно
-        if (!who.admin) return { error: 'admin' };
+        // бронь від імені старости чи помічника для когось іще: окремий «власник» на кожну бронь,
+        // тож парт може бути скільки завгодно
+        if (!who.admin && !who.booker) return { error: 'admin' };
         const proxy = `admin:${crypto.randomUUID()}`, booked = [], taken = [];
         for (const slot of a.slots) {
           if (this.sql.exec('SELECT 1 FROM desk_bookings WHERE date = ? AND slot = ? AND seat = ?', a.date, slot, a.seat).toArray().length) { taken.push(slot); continue; }
@@ -266,7 +269,7 @@ export class Board extends DurableObject {
           booked.push(slot);
         }
         if (!booked.length) return { error: 'taken' };
-        this.log('забронював', `${a.date}, уроки ${booked.join(', ')}, парта ${a.seat} — ${a.name}`);
+        this.log(who.admin ? 'забронював' : 'помічник забронював', `${a.date}, уроки ${booked.join(', ')}, парта ${a.seat} — ${a.name}`);
         return { day: this.day(a.date, owner), booked, taken };
       }
       case 'hw': {
@@ -413,13 +416,15 @@ async function handle(request, env) {
     const token = request.headers.get('x-token') || '';
     if (!/^[0-9a-f]{32}$/.test(token)) return fail('token', 401);
     const adminKey = request.headers.get('x-admin') || '';
-    let admin = false;
+    let admin = false, booker = false;
     if (adminKey) {
       if (adminBlocked(ip)) return fail('blocked', 429);
-      admin = (await sha256(adminKey)) === ADMIN_HASH;
-      if (!admin) adminFailed(ip);
+      const hash = await sha256(adminKey);
+      admin = hash === ADMIN_HASH;
+      booker = hash === BOOKER_HASH;
+      if (!admin && !booker) adminFailed(ip);
     }
-    const who = { owner: await sha256(token), ip, admin };
+    const who = { owner: await sha256(token), ip, admin, booker };
     const board = env.BOARD.get(env.BOARD.idFromName('8b'));
     const path = url.pathname, q = url.searchParams;
     const reply = r => (r.error ? fail(r.error, r.error === 'taken' ? 409 : r.error === 'slow' ? 429 : r.error === 'admin' ? 403 : 400) : json(r));
@@ -435,7 +440,7 @@ async function handle(request, env) {
         if (!DATE.test(date) || !Number.isInteger(lesson)) return fail('date');
         return json({ history: await board.hwHistory(date, lesson) });
       }
-      if (path === '/api/admin') return json({ admin: who.admin });
+      if (path === '/api/admin') return json({ admin: who.admin, booker: who.booker });
       if (path === '/api/admin/log') return who.admin ? json({ log: await board.adminLog() }) : fail('admin', 403);
       // старі адреси для сторінок, що ще не оновились
       if (path === '/api/days') {
