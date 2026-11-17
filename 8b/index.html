@@ -87,10 +87,11 @@
   <!-- Парти -->
   <section class="panel" id="panel-desks" role="tabpanel" aria-labelledby="tab-desks">
     <div class="days" id="days" role="radiogroup" aria-label="День"></div>
+    <div class="slots" id="slots" role="radiogroup" aria-label="Урок"></div>
 
     <div class="room-head">
       <div>
-        <div class="eyebrow">План класу</div>
+        <div class="eyebrow" id="room-eyebrow">План класу</div>
         <div class="room-day" id="room-day"></div>
       </div>
       <div class="tally" id="tally"></div>
@@ -206,6 +207,7 @@
       <span>Імʼя та прізвище</span>
       <input id="name-input" name="name" maxlength="32" placeholder="Як тебе підписати на парті" required>
     </label>
+    <button type="button" class="btn primary btn-wide" id="sheet-all" hidden></button>
     <div class="sheet-actions">
       <button type="button" class="btn ghost" id="sheet-cancel">Закрити</button>
       <button type="submit" class="btn primary" id="sheet-submit">Забронювати</button>
@@ -219,6 +221,7 @@
     <button type="button" class="btn ghost" id="sheet-close">Закрити</button>
     <button type="button" class="btn danger" id="sheet-release">Звільнити парту</button>
   </div>
+  <button type="button" class="link-btn" id="sheet-release-all" hidden></button>
   <p class="sheet-error" id="sheet-error" role="alert"></p>
 </div>
 

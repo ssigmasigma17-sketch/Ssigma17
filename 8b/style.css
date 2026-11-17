@@ -259,6 +259,20 @@ main { padding-top: 22px; }
 .day[aria-checked="true"] .d-bar i { background: var(--paper); }
 .day[aria-checked="true"] .d-today { color: color-mix(in srgb, var(--paper) 80%, transparent); }
 
+/* уроки дня на «Партах» */
+.slots { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: -6px calc(var(--gutter) * -1) 0; padding: 2px var(--gutter) 4px; }
+.slots::-webkit-scrollbar { display: none; }
+.slot {
+  flex: none; display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 9px 12px; border: 1.5px solid var(--line-strong); border-radius: 999px; background: var(--surface);
+  font-size: 14px; font-weight: 500; white-space: nowrap; position: relative;
+}
+.slot b { font: 700 14px/1 var(--f-display); }
+.slot.on { background: var(--fg); border-color: var(--fg); color: var(--paper); }
+.slot.has::after { content: ''; position: absolute; top: 4px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+.btn-wide { width: 100%; }
+#sheet-release-all { justify-self: center; }
+
 /* ---------- план класу ---------- */
 .room-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .room-day { font: 700 18px/1.25 var(--f-display); margin-top: 4px; }

@@ -214,19 +214,40 @@
     }
   }
 
-  // ---------- броні ----------
-  // бронюється вся парта: id «ряд-парта»
+  // ---------- броні: на кожен урок своя парта ----------
   const seatName = id => { const [r, d] = id.split('-'); return { r, d, text: `ряд ${r}, парта ${d}` }; };
-  const seatIds = [];
-  const ROWS = C.layout.length, DEPTH = Math.max(...C.layout);
-  C.layout.forEach((n, i) => { for (let d = 1; d <= n; d++) seatIds.push(`${i + 1}-${d}`); });
-  const TOTAL = seatIds.length;
-  // старі броні окремих місць («1-2-L») не показуємо
-  const cleanDay = day => {
-    const seats = {};
-    for (const id of seatIds) if (day.seats[id]) seats[id] = day.seats[id];
-    return { seats, mine: seatIds.includes(day.mine) ? day.mine : null };
+  // план кабінету — скільки парт у кожному ряду
+  const layoutFor = subj => C.layouts[subj] || C.layouts.default;
+  const seatsOf = lay => lay.flatMap((n, i) => Array.from({ length: n }, (_, d) => `${i + 1}-${d + 1}`));
+  // уроки дня, на які бронюють парти; при поділі на групи в кожної групи свій кабінет і свій план
+  function slotsOf(date) {
+    const L = lessonsOn(date), out = [];
+    if (!L) return out;
+    L.forEach((l, n) => {
+      if (!l || C.noDesks.includes(l.s)) return;
+      if (l.g) l.g.forEach((g, gi) => {
+        const subj = g.s || l.s;
+        out.push({ id: `${n + 1}.${gi + 1}`, n, subj, room: g.r, group: gi + 1, layout: layoutFor(subj) });
+      });
+      else out.push({ id: `${n + 1}`, n, subj: l.s, room: l.r, group: 0, layout: layoutFor(l.s) });
+    });
+    return out;
+  }
+  const slotOf = (date, id) => slotsOf(date).find(sl => sl.id === id);
+  // лишаємо тільки парти, які є в плані цього уроку
+  const cleanDay = (day, date) => {
+    const slots = {};
+    for (const sl of slotsOf(date)) {
+      const x = day.slots?.[sl.id], ids = seatsOf(sl.layout);
+      if (!x) continue;
+      const seats = {};
+      for (const id of ids) if (x.seats[id]) seats[id] = x.seats[id];
+      slots[sl.id] = { seats, mine: ids.includes(x.mine) ? x.mine : null };
+    }
+    return { slots };
   };
+  const slotData = (date, id) => data[date]?.slots?.[id] || { seats: {}, mine: null };
+  const myCount = date => slotsOf(date).filter(sl => slotData(date, sl.id).mine).length;
 
   // Сервер — src/worker.js. Якщо його немає — демо в localStorage.
   let adminKey = store.get('admin');
@@ -247,8 +268,8 @@
       return data;
     },
     sync: q => server.req(`/api/sync?dates=${q.dates.join(',')}&from=${q.from}&to=${q.to}&chat=${q.chat}&rev=${q.rev}`),
-    book: (date, seat, name) => server.req('/api/book', { date, seat, name }),
-    release: date => server.req('/api/release', { date }),
+    book: (date, slots, seat, name) => server.req('/api/book', { date, slots, seat, name }),
+    release: (date, slots) => server.req('/api/release', { date, slots }),
     setHw: (date, lesson, text, name) => server.req('/api/hw', { date, lesson, text, name }),
     hwHistory: (date, lesson) => server.req(`/api/hw/history?date=${date}&lesson=${lesson}`),
     createPoll: (q, options, name) => server.req('/api/polls', { q, options, name }),
@@ -258,39 +279,40 @@
     deleteChat: id => server.req('/api/chat/delete', { id }),
     react: (id, emoji) => server.req('/api/chat/react', { id, emoji }),
     adminCheck: () => server.req('/api/admin'),
-    adminRelease: (date, seat) => server.req('/api/admin/release', { date, seat }),
+    adminRelease: (date, slot, seat) => server.req('/api/admin/release', { date, slot, seat }),
     hwHistoryClear: (date, lesson) => server.req('/api/admin/hw-history-clear', { date, lesson }),
   };
 
   const demo = {
-    all() { return store.get('demo-bookings-v3', {}); },
-    day(all, date) { return (all[date] ||= { seats: {}, mine: null }); },
+    all() { return store.get('demo-bookings-v4', {}); },
+    day(all, date) { return (all[date] ||= { slots: {} }); },
     async days(dates) {
       const all = demo.all(), days = {};
-      for (const d of dates) days[d] = demo.view(demo.day(all, d));
-      store.set('demo-bookings-v3', all);
+      for (const d of dates) days[d] = demo.day(all, d);
       return { days };
     },
-    view(day) {
-      const seats = {};
-      for (const [k, v] of Object.entries(day.seats)) seats[k] = { name: v.name };
-      return { seats, mine: day.mine };
+    async book(date, slots, seat, name) {
+      const all = demo.all(), day = demo.day(all, date), booked = [], taken = [];
+      for (const id of slots) {
+        const x = (day.slots[id] ||= { seats: {}, mine: null });
+        if (x.seats[seat] && x.mine !== seat) { taken.push(id); continue; }
+        if (x.mine) delete x.seats[x.mine];
+        x.seats[seat] = { name };
+        x.mine = seat;
+        booked.push(id);
+      }
+      if (!booked.length) throw Object.assign(new Error('taken'), { code: 'taken' });
+      store.set('demo-bookings-v4', all);
+      return { day, booked, taken };
     },
-    async book(date, seat, name) {
+    async release(date, slots) {
       const all = demo.all(), day = demo.day(all, date);
-      if (day.seats[seat] && day.mine !== seat) throw Object.assign(new Error('taken'), { code: 'taken' });
-      if (day.mine) delete day.seats[day.mine];
-      day.seats[seat] = { name };
-      day.mine = seat;
-      store.set('demo-bookings-v3', all);
-      return { day: demo.view(day) };
-    },
-    async release(date) {
-      const all = demo.all(), day = demo.day(all, date);
-      if (day.mine) delete day.seats[day.mine];
-      day.mine = null;
-      store.set('demo-bookings-v3', all);
-      return { day: demo.view(day) };
+      for (const id of slots) {
+        const x = day.slots[id];
+        if (x?.mine) { delete x.seats[x.mine]; x.mine = null; }
+      }
+      store.set('demo-bookings-v4', all);
+      return { day };
     },
     async hw(from, to) {
       const all = store.get('demo-hw', {}), hw = {};
@@ -355,8 +377,8 @@
 
   let api = server;
   let bookDates = [];
-  let selDate = null;
-  let data = {};          // date -> { seats: { id: { name } }, mine }
+  let selDate = null, selSlot = null;
+  let data = {};          // date -> { slots: { урок: { seats: { id: { name } }, mine } } }
   let hw = {};            // "date|урок" -> { text, by, at }
   let polls = [];
   let lastSync = 0;
@@ -383,7 +405,7 @@
     if (list.join() === bookDates.join() && hwList.join() === hwDates.join()) return;
     bookDates = list;
     hwDates = hwList;
-    if (!bookDates.includes(selDate)) selDate = dayOver(now) ? bookDates[bookDates.length - 1] : bookDates[0];
+    if (!bookDates.includes(selDate)) pickDate(dayOver(now) ? bookDates[bookDates.length - 1] : bookDates[0]);
     renderDays();
     renderHwPanel();
     refresh();
@@ -394,7 +416,7 @@
     try {
       const week = weekDates(kyivNow());
       const r = await api.sync({ dates: bookDates, from: week[0], to: addDays(week[0], 20), chat: chatLast, rev: chatRev });
-      data = Object.fromEntries(Object.entries(r.days).map(([d, day]) => [d, cleanDay(day)]));
+      data = Object.fromEntries(Object.entries(r.days).map(([d, day]) => [d, cleanDay(day, d)]));
       hw = r.hw;
       polls = r.polls;
       mergeChat(r.chat);
@@ -605,6 +627,23 @@
   $('hw-clear').addEventListener('click', () => saveHw(''));
   $('hw-cancel').addEventListener('click', () => closeSheet());
 
+  // вибір дня: на сьогодні — поточний або наступний урок, інакше перший; групу памʼятаємо
+  function pickDate(date) {
+    selDate = date;
+    const list = slotsOf(date), now = kyivNow(), grp = store.get('group', 1);
+    const prefer = arr => arr.find(sl => !sl.group || sl.group === grp) || arr[0];
+    let pick = null;
+    if (date === now.date) pick = prefer(list.filter(sl => now.min < BELLS[sl.n][1]));
+    selSlot = (pick || prefer(list))?.id || null;
+  }
+  function pickSlot(id) {
+    selSlot = id;
+    const sl = slotOf(selDate, id);
+    if (sl?.group) store.set('group', sl.group);
+    renderSlots();
+    renderRoom();
+  }
+
   function renderDays() {
     const box = $('days'), today = kyivNow().date;
     box.style.setProperty('--n', bookDates.length);
@@ -616,48 +655,69 @@
       b.setAttribute('aria-checked', String(d === selDate));
       b.setAttribute('aria-label', `${DOW[dowOf(d)]}, ${longDate(d)}`);
       b.append(h('span', 'd-dow', DOW_S[dowOf(d)]), h('span', 'd-num', dayNum(d)));
-      const bar = h('span', 'd-bar'), fill = h('i');
-      const n = data[d] ? Object.keys(data[d].seats).length : 0;
-      fill.style.width = `${(n / TOTAL) * 100}%`;
+      const bar = h('span', 'd-bar'), fill = h('i'), list = slotsOf(d), mine = myCount(d);
+      fill.style.width = `${list.length ? (mine / list.length) * 100 : 0}%`;
       bar.append(fill);
-      b.append(bar, h('span', 'd-today', data[d]?.mine ? 'є парта' : d === today ? 'сьогодні' : bookable(d, today) ? 'бронь відкрита' : ''));
-      b.onclick = () => { selDate = d; renderDays(); renderRoom(); };
+      b.append(bar, h('span', 'd-today', mine ? `парта на ${mine} ${plural(mine, 'урок', 'уроки', 'уроків')}` : d === today ? 'сьогодні' : bookable(d, today) ? 'бронь відкрита' : ''));
+      b.onclick = () => { pickDate(d); renderDays(); renderSlots(); renderRoom(); };
       box.append(b);
     }
+    renderSlots();
+  }
+
+  // уроки обраного дня
+  function renderSlots() {
+    const box = $('slots');
+    box.textContent = '';
+    for (const sl of slotsOf(selDate)) {
+      const mine = slotData(selDate, sl.id).mine;
+      const b = h('button', `slot${sl.id === selSlot ? ' on' : ''}${mine ? ' has' : ''}`);
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(sl.id === selSlot));
+      b.setAttribute('aria-label', `${sl.n + 1} урок, ${sl.subj}${sl.group ? `, група ${sl.group}` : ''}`);
+      b.append(h('b', '', sl.n + 1), h('span', '', `${SHORT[sl.subj] || sl.subj}${sl.group ? ` · гр.${sl.group}` : ''}`));
+      b.onclick = () => pickSlot(sl.id);
+      box.append(b);
+    }
+    box.querySelector('.slot.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   function renderRoom() {
-    const day = data[selDate] || { seats: {}, mine: null };
+    const sl = selDate && slotOf(selDate, selSlot);
+    if (!sl) { $('rows').textContent = ''; return; }
+    const day = slotData(selDate, sl.id), ids = seatsOf(sl.layout), total = ids.length;
     const taken = Object.keys(day.seats).length;
-    $('room-day').textContent = `${cap(DOW[dowOf(selDate)])}, ${longDate(selDate)}`;
-    $('tally').innerHTML = `<b>${TOTAL - taken}</b>вільних із ${TOTAL}`;
+    $('room-eyebrow').textContent = `${DOW_S[dowOf(selDate)]}, ${longDate(selDate)} · каб. ${sl.room}`;
+    $('room-day').textContent = `${sl.n + 1} урок · ${sl.subj}${sl.group ? ` · гр. ${sl.group}` : ''}`;
+    $('tally').innerHTML = `<b>${total - taken}</b>вільних із ${total}`;
     const open = bookable(selDate);
     $('room-note').hidden = open;
     $('room-note').textContent = 'Сьогодні бронювати вже не можна: парти бронюють напередодні.';
-    // звична парта — та, яку бронював минулого разу
-    const fav = store.get('fav');
-    const favFree = open && !day.mine && seatIds.includes(fav) && !day.seats[fav];
+    // звична парта — остання, яку бронював у кабінеті з таким самим планом
+    const fav = (store.get('favs', {}) || {})[sl.layout.join('-')];
+    const favFree = open && !day.mine && ids.includes(fav) && !day.seats[fav];
     $('fav-btn').hidden = !favFree;
     if (favFree) {
       const f = seatName(fav);
       $('fav-btn').innerHTML = `<span>Сісти за свою звичну парту</span><b>ряд ${f.r}, парта ${f.d}</b>`;
     }
     $('room').classList.toggle('loading', !lastSync && api === server && $('demo').hidden);
-    const rows = $('rows');
-    rows.style.setProperty('--rows', ROWS);
+    const rows = $('rows'), lay = sl.layout, R = lay.length, depth = Math.max(...lay);
+    rows.style.setProperty('--rows', R);
     rows.textContent = '';
-    for (let d = 1; d <= DEPTH; d++) {
+    for (let d = 1; d <= depth; d++) {
       rows.append(h('div', 'desk-no', d));
-      for (let r = 1; r <= ROWS; r++) {
+      for (let r = 1; r <= R; r++) {
         // у коротшому ряду ззаду порожньо
-        if (d > C.layout[r - 1]) { rows.append(h('div', 'desk-gap')); continue; }
+        if (d > lay[r - 1]) { rows.append(h('div', 'desk-gap')); continue; }
         const desk = h('div', 'desk');
         desk.append(seatButton(`${r}-${d}`, day, favFree && fav === `${r}-${d}`));
         rows.append(desk);
       }
     }
     rows.append(h('div'));
-    for (let r = 1; r <= ROWS; r++) rows.append(h('div', 'row-name', `${r} ряд`));
+    for (let r = 1; r <= R; r++) rows.append(h('div', 'row-name', `${r} ряд`));
     fitNames();
     const sync = $('sync');
     sync.classList.remove('off');
@@ -703,33 +763,49 @@
   }
 
   function onSeat(id) {
-    const day = data[selDate] || { seats: {}, mine: null };
-    const who = day.seats[id];
+    const day = slotData(selDate, selSlot), who = day.seats[id];
     if (who && day.mine !== id) return isAdmin ? openAdminSeat(id, who) : toast(`${who.name} · ${seatName(id).text}`);
     if (!who && !bookable(selDate)) return toast('Бронювати можна лише напередодні');
-    openSheet(id, day);
+    openSheet(id);
+  }
+
+  // інші уроки цього дня в тому самому кабінеті, де ця парта вільна або вже твоя
+  function sameRoomSlots(seat) {
+    const cur = slotOf(selDate, selSlot);
+    return slotsOf(selDate).filter(sl => sl.room === cur.room && sl.layout.join() === cur.layout.join() &&
+      (!slotData(selDate, sl.id).seats[seat] || slotData(selDate, sl.id).mine === seat));
   }
 
   // ---------- аркуш ----------
   let sheetSeat = null;
-  function openSheet(id, day) {
+  function openSheet(id) {
     sheetSeat = id;
-    const mine = day.mine === id;
-    const sn = seatName(id);
-    $('sheet-eyebrow').textContent = `${DOW[dowOf(selDate)]}, ${longDate(selDate)}`;
+    const day = slotData(selDate, selSlot), sl = slotOf(selDate, selSlot);
+    const mine = day.mine === id, sn = seatName(id);
+    $('sheet-eyebrow').textContent = `${DOW[dowOf(selDate)]}, ${longDate(selDate)} · ${sl.n + 1} урок, ${SHORT[sl.subj] || sl.subj}`;
     $('sheet-title').textContent = `Ряд ${sn.r} · парта ${sn.d}`;
     $('sheet-error').textContent = '';
     $('sheet-form').hidden = mine;
     $('sheet-mine').hidden = !mine;
     $('sheet-admin').hidden = true;
+    $('sheet-release-all').hidden = true;
     if (mine) {
-      $('sheet-text').innerHTML = 'Це твоя парта. Звільни її, якщо не прийдеш або хочеш пересісти.';
+      const k = myCount(selDate);
+      $('sheet-text').innerHTML = 'Це твоя парта на цьому уроці. Звільни її, якщо не прийдеш або хочеш пересісти.';
+      $('sheet-release').textContent = 'Звільнити цей урок';
+      $('sheet-release-all').hidden = k < 2;
+      $('sheet-release-all').textContent = `Звільнити всі ${k} ${plural(k, 'урок', 'уроки', 'уроків')} цього дня`;
     } else {
       const was = day.mine ? seatName(day.mine) : null;
+      const all = sameRoomSlots(id);
       $('sheet-text').innerHTML = was
-        ? `Твоя теперішня парта (ряд ${was.r}, парта ${was.d}) звільниться.`
-        : 'Уся парта буде твоя на цей день.';
-      $('sheet-submit').textContent = was ? 'Пересісти сюди' : 'Забронювати парту';
+        ? `На цьому уроці твоя парта зараз — ряд ${was.r}, парта ${was.d}. Вона звільниться.`
+        : `${sl.subj}, каб. ${sl.room}.`;
+      $('sheet-all').hidden = all.length < 2;
+      $('sheet-all').textContent = `На всі уроки в каб. ${sl.room} · ${all.length}`;
+      $('sheet-submit').textContent = all.length < 2 ? (was ? 'Пересісти сюди' : 'Забронювати парту') : 'Лише на цей урок';
+      $('sheet-submit').classList.toggle('primary', all.length < 2);
+      $('sheet-submit').classList.toggle('ghost', all.length >= 2);
       $('name-input').value = store.get('name', '');
     }
     $('scrim').hidden = false;
@@ -747,14 +823,15 @@
     $('sheet-form').hidden = true;
     $('sheet-mine').hidden = true;
     $('sheet-admin').hidden = false;
+    $('sheet-release-all').hidden = true;
     $('scrim').hidden = false;
     $('sheet').hidden = false;
   }
   $('sheet-admin-release').addEventListener('click', async () => {
     const date = selDate;
     try {
-      const r = await api.adminRelease(date, sheetSeat);
-      data[date] = cleanDay(r.day);
+      const r = await api.adminRelease(date, selSlot, sheetSeat);
+      data[date] = cleanDay(r.day, date);
       closeSheet();
       renderDays();
       renderRoom();
@@ -771,30 +848,41 @@
     hwOpen = null;
   }
 
-  $('sheet-form').addEventListener('submit', async e => {
-    e.preventDefault();
+  function sheetName() {
     const name = $('name-input').value.trim().replace(/\s+/g, ' ');
-    if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чия це парта.'; return; }
+    if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чия це парта.'; return null; }
     store.set('name', name);
-    $('sheet-submit').disabled = true;
-    const err = await bookSeat(sheetSeat, selDate, name);
-    $('sheet-submit').disabled = false;
+    return name;
+  }
+  async function submitBooking(slots, btn) {
+    const name = sheetName();
+    if (!name) return;
+    btn.disabled = true;
+    const err = await bookSeat(sheetSeat, selDate, slots, name);
+    btn.disabled = false;
     if (err) $('sheet-error').textContent = err;
+  }
+  $('sheet-form').addEventListener('submit', e => {
+    e.preventDefault();
+    submitBooking([selSlot], $('sheet-submit'));
   });
+  $('sheet-all').addEventListener('click', () => submitBooking(sameRoomSlots(sheetSeat).map(sl => sl.id), $('sheet-all')));
 
   // повертає текст помилки або null
-  async function bookSeat(seat, date, name) {
+  async function bookSeat(seat, date, slots, name) {
     try {
-      const r = await api.book(date, seat, name);
-      data[date] = cleanDay(r.day);
-      store.set('fav', seat);
+      const r = await api.book(date, slots, seat, name);
+      data[date] = cleanDay(r.day, date);
+      const sl = slotOf(date, selSlot);
+      if (sl) store.set('favs', { ...(store.get('favs', {}) || {}), [sl.layout.join('-')]: seat });
       popSeat = seat;
       buzz([12, 50, 18]);
       closeSheet();
       renderDays();
       renderRoom();
       renderDigest();
-      toast(`Парта твоя ${DOW_ON[dowOf(date)]}, ${longDate(date)}`);
+      const k = r.booked?.length || 1, miss = r.taken?.length || 0;
+      toast(k > 1 ? `Парта твоя на ${k} ${plural(k, 'урок', 'уроки', 'уроків')}${miss ? `; на ${miss} — уже зайнята` : ''}` : `Парта твоя ${DOW_ON[dowOf(date)]}`);
       return null;
     } catch (err) {
       if (err.code === 'taken') refresh();
@@ -805,30 +893,35 @@
     }
   }
   $('fav-btn').addEventListener('click', async () => {
-    const fav = store.get('fav'), name = store.get('name', '');
-    if (!name) return openSheet(fav, data[selDate] || { seats: {}, mine: null });
+    const sl = slotOf(selDate, selSlot), fav = (store.get('favs', {}) || {})[sl.layout.join('-')], name = store.get('name', '');
+    if (!name) return openSheet(fav);
+    sheetSeat = fav;
     $('fav-btn').disabled = true;
-    const err = await bookSeat(fav, selDate, name);
+    const err = await bookSeat(fav, selDate, sameRoomSlots(fav).map(x => x.id), name);
     $('fav-btn').disabled = false;
     if (err) toast(err);
   });
-  $('sheet-release').addEventListener('click', async () => {
+  async function release(slots, btn) {
     const date = selDate;
-    $('sheet-release').disabled = true;
+    btn.disabled = true;
     try {
-      const r = await api.release(date);
-      data[date] = cleanDay(r.day);
+      const r = await api.release(date, slots);
+      data[date] = cleanDay(r.day, date);
       buzz(10);
       closeSheet();
       renderDays();
       renderRoom();
-      toast('Парту звільнено');
+      renderDigest();
+      toast(slots.length > 1 ? 'Парти на цей день звільнено' : 'Парту звільнено');
     } catch {
       $('sheet-error').textContent = 'Не вдалося звільнити парту. Спробуй ще раз.';
     } finally {
-      $('sheet-release').disabled = false;
+      btn.disabled = false;
     }
-  });
+  }
+  $('sheet-release').addEventListener('click', () => release([selSlot], $('sheet-release')));
+  $('sheet-release-all').addEventListener('click', () =>
+    release(slotsOf(selDate).filter(sl => slotData(selDate, sl.id).mine).map(sl => sl.id), $('sheet-release-all')));
   for (const id of ['sheet-cancel', 'sheet-close', 'scrim']) $(id).addEventListener('click', closeSheet);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('scrim').hidden) closeSheet(); });
 
@@ -968,15 +1061,18 @@
   function renderDigest() {
     if (!bookDates.length) return;
     const now = kyivNow();
-    // парта: сьогоднішня, поки йдуть уроки й вона є, інакше на день, який можна бронювати
+    // парти: сьогодні, поки йдуть уроки й є броні, інакше день, який можна бронювати
     const today = now.date, next = bookDates[bookDates.length - 1];
-    const deskDay = data[today]?.mine && !dayOver(now) ? today : next;
-    const mine = data[deskDay]?.mine;
+    const deskDay = myCount(today) && !dayOver(now) ? today : next;
     const short = d => (d === today ? 'сьогодні' : d === addDays(today, 1) ? 'завтра' : DOW_S[dowOf(d)]);
+    const list = slotsOf(deskDay), mineSlots = list.filter(sl => slotData(deskDay, sl.id).mine);
+    const seats = new Set(mineSlots.map(sl => slotData(deskDay, sl.id).mine));
     $('dg-desk-k').textContent = `Парта ${deskDay === today ? 'сьогодні' : 'на ' + short(deskDay)}`;
-    $('dg-desk-v').textContent = mine ? `ряд ${seatName(mine).r} · ${seatName(mine).d}` : bookable(deskDay) ? 'забронюй' : 'немає';
-    $('dg-desk').classList.toggle('cta', !mine && bookable(deskDay));
-    $('dg-desk').onclick = () => { selDate = deskDay; renderDays(); renderRoom(); goTab('desks'); };
+    $('dg-desk-v').textContent = !mineSlots.length ? (bookable(deskDay) ? 'забронюй' : 'немає')
+      : mineSlots.length === list.length && seats.size === 1 ? `ряд ${seatName([...seats][0]).r} · ${seatName([...seats][0]).d}`
+      : `${mineSlots.length} з ${list.length} ур.`;
+    $('dg-desk').classList.toggle('cta', !mineSlots.length && bookable(deskDay));
+    $('dg-desk').onclick = () => { pickDate(deskDay); renderDays(); renderRoom(); goTab('desks'); };
     // домашка на найближчий день
     const hd = hwDates[0];
     if (hd) {
@@ -1368,11 +1464,9 @@
     el.classList.add(dir > 0 ? 'slide-next' : 'slide-prev');
   }
   onSwipe($('room'), dir => {
-    const i = bookDates.indexOf(selDate) + dir;
-    if (i < 0 || i >= bookDates.length) return;
-    selDate = bookDates[i];
-    renderDays();
-    renderRoom();
+    const list = slotsOf(selDate), i = list.findIndex(sl => sl.id === selSlot) + dir;
+    if (i < 0 || i >= list.length) return;
+    pickSlot(list[i].id);
     slide($('room'), dir);
   });
   onSwipe($('week-grid'), dir => {
