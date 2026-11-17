@@ -18,14 +18,18 @@
 //   POST /api/chat/react    { id, emoji }                поставити / зняти реакцію (👍 😂 ❤️ 🔥)
 //   GET  /api/admin                                      { admin } — чи правильний код старости
 //   POST /api/admin/release { date, slot, seat }         староста знімає будь-яку бронь
+//   POST /api/admin/book    { date, slots, seat, name }  староста бронює парту для когось іще (скільки завгодно парт,
+//                                                        і на сьогодні теж)
+//   GET  /api/admin/log                                  останні дії старости
 //   POST /api/admin/hw-history-clear { date, lesson }
 //
 // Хто є хто — випадковий токен пристрою в заголовку x-token; у базі лежить лише його SHA-256.
-// Код старости — заголовок x-admin; у коді лежить лише його SHA-256.
+// Код старости — заголовок x-admin; у коді лежить лише його SHA-256. Після 5 хибних кодів за 15 хв з однієї адреси
+// сервер перестає перевіряти коди з неї. Усі дії старости пишуться в журнал.
 // Імена назовні віддаються скорочено: «Нестор Гуцалік» → «Нестор Г.».
 import { DurableObject } from 'cloudflare:workers';
 
-const ADMIN_HASH = 'a3f2a5c657e26bb0a9ecf957112c2c519b46f4b3b6d620da46a07e4b32a4bffc';
+const ADMIN_HASH = '4623f62e26392e64161401c7820a182bf8550b0dcf6fb7cd1e57a31cb683aea2';
 // Парта — «ряд-парта». У різних кабінетах різна кількість рядів і парт, точний план знає сторінка,
 // сервер лише не пускає неможливе: до 4 рядів, до 6 парт у ряду.
 const SEAT = /^[1-4]-[1-6]$/;
@@ -46,9 +50,10 @@ const LIMITS = {
   chat: [12, 60e3],         // повідомлень за хвилину від однієї людини
 };
 
-// Сторінка лежить на іншому сайті (GitHub Pages), тому API відкрите для всіх джерел.
+// Сторінка лежить на GitHub Pages, тож браузери пускаємо лише звідти (і з локального сервера для розробки).
+const ORIGINS = /^(https:\/\/ssigmasigma17-sketch\.github\.io|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)$/;
 const CORS = {
-  'access-control-allow-origin': '*',
+  'access-control-allow-origin': 'https://ssigmasigma17-sketch.github.io',
   'access-control-allow-methods': 'GET, POST, OPTIONS',
   'access-control-allow-headers': 'content-type, x-token, x-admin',
   'access-control-max-age': '86400',
@@ -115,6 +120,7 @@ export class Board extends DurableObject {
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)');
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reactions (
       msg INTEGER NOT NULL, owner TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (msg, owner, emoji))`);
+    this.sql.exec('CREATE TABLE IF NOT EXISTS admin_log (at INTEGER NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL)');
     // броні по уроках: на кожен урок своя парта
     this.sql.exec(`CREATE TABLE IF NOT EXISTS desk_bookings (
       date TEXT NOT NULL, slot TEXT NOT NULL, seat TEXT NOT NULL, name TEXT NOT NULL, owner TEXT NOT NULL, created INTEGER NOT NULL,
@@ -242,10 +248,27 @@ export class Board extends DurableObject {
       case 'release':
         for (const slot of a.slots) this.sql.exec('DELETE FROM desk_bookings WHERE date = ? AND slot = ? AND owner = ?', a.date, slot, owner);
         return { day: this.day(a.date, owner) };
-      case 'adminRelease':
+      case 'adminRelease': {
         if (!who.admin) return { error: 'admin' };
+        const cur = this.sql.exec('SELECT name FROM desk_bookings WHERE date = ? AND slot = ? AND seat = ?', a.date, a.slot, a.seat).toArray()[0];
         this.sql.exec('DELETE FROM desk_bookings WHERE date = ? AND slot = ? AND seat = ?', a.date, a.slot, a.seat);
+        if (cur) this.log('зняв бронь', `${a.date}, урок ${a.slot}, парта ${a.seat} — ${cur.name}`);
         return { day: this.day(a.date, owner) };
+      }
+      case 'adminBook': {
+        // бронь від імені старости для когось іще: окремий «власник» на кожну бронь, тож парт може бути скільки завгодно
+        if (!who.admin) return { error: 'admin' };
+        const proxy = `admin:${crypto.randomUUID()}`, booked = [], taken = [];
+        for (const slot of a.slots) {
+          if (this.sql.exec('SELECT 1 FROM desk_bookings WHERE date = ? AND slot = ? AND seat = ?', a.date, slot, a.seat).toArray().length) { taken.push(slot); continue; }
+          this.sql.exec('INSERT INTO desk_bookings (date, slot, seat, name, owner, created) VALUES (?, ?, ?, ?, ?, ?)',
+            a.date, slot, a.seat, a.name, proxy, Date.now());
+          booked.push(slot);
+        }
+        if (!booked.length) return { error: 'taken' };
+        this.log('забронював', `${a.date}, уроки ${booked.join(', ')}, парта ${a.seat} — ${a.name}`);
+        return { day: this.day(a.date, owner), booked, taken };
+      }
       case 'hw': {
         // попередня версія йде в історію, щоб зіпсований запис можна було повернути
         const old = this.sql.exec('SELECT text, by, at FROM homework WHERE date = ? AND lesson = ?', a.date, a.lesson).toArray()[0];
@@ -263,6 +286,7 @@ export class Board extends DurableObject {
       }
       case 'hwHistoryClear':
         if (!who.admin) return { error: 'admin' };
+        this.log('очистив історію домашки', `${a.date}, урок ${a.lesson}`);
         this.sql.exec('DELETE FROM homework_history WHERE date = ? AND lesson = ?', a.date, a.lesson);
         return { history: [] };
       case 'poll': {
@@ -287,6 +311,7 @@ export class Board extends DurableObject {
         const p = this.sql.exec('SELECT owner FROM polls WHERE id = ?', a.id).toArray()[0];
         if (!p) return { error: 'poll' };
         if (p.owner !== owner && !who.admin) return { error: 'owner' };
+        if (p.owner !== owner) this.log('видалив опитування', `#${a.id}`);
         this.sql.exec('DELETE FROM votes WHERE poll = ?', a.id);
         this.sql.exec('DELETE FROM polls WHERE id = ?', a.id);
         return { polls: this.polls(owner) };
@@ -299,6 +324,7 @@ export class Board extends DurableObject {
         const m = this.sql.exec('SELECT owner FROM chat WHERE id = ?', a.id).toArray()[0];
         if (!m) return { error: 'msg' };
         if (m.owner !== owner && !who.admin) return { error: 'owner' };
+        if (m.owner !== owner) this.log('видалив повідомлення', `#${a.id}`);
         this.sql.exec('DELETE FROM chat WHERE id = ?', a.id);
         this.sql.exec('DELETE FROM reactions WHERE msg = ?', a.id);
         this.bumpChat();
@@ -315,6 +341,14 @@ export class Board extends DurableObject {
       }
     }
     return { error: 'not_found' };
+  }
+
+  log(action, detail) {
+    this.sql.exec('INSERT INTO admin_log (at, action, detail) VALUES (?, ?, ?)', Date.now(), action, detail);
+  }
+  adminLog() {
+    this.sql.exec('DELETE FROM admin_log WHERE at < ?', Date.now() - 60 * DAY);
+    return this.sql.exec('SELECT at, action, detail FROM admin_log ORDER BY at DESC LIMIT 40').toArray();
   }
 
   cleanup() {
@@ -341,8 +375,35 @@ function flood(ip) {
   return ++e.n > 240;
 }
 
+// хибні коди старости: після 5 спроб за 15 хв з адреси коди з неї більше не перевіряються
+const adminFails = new Map();
+function adminBlocked(ip) {
+  const e = adminFails.get(ip);
+  return !!e && Date.now() - e.t < 15 * 60e3 && e.n >= 5;
+}
+function adminFailed(ip) {
+  const now = Date.now();
+  let e = adminFails.get(ip);
+  if (!e || now - e.t > 15 * 60e3) adminFails.set(ip, (e = { t: now, n: 0 }));
+  if (adminFails.size > 5000) adminFails.clear();
+  e.n++;
+}
+
 export default {
   async fetch(request, env) {
+    const res = await handle(request, env);
+    // браузерам дозволяємо читати відповіді лише на сторінці класу
+    const origin = request.headers.get('origin') || '';
+    if (ORIGINS.test(origin)) {
+      res.headers.set('access-control-allow-origin', origin);
+      res.headers.set('vary', 'Origin');
+    }
+    return res;
+  },
+};
+
+async function handle(request, env) {
+  {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(request) : fail('not_found', 404);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -352,7 +413,13 @@ export default {
     const token = request.headers.get('x-token') || '';
     if (!/^[0-9a-f]{32}$/.test(token)) return fail('token', 401);
     const adminKey = request.headers.get('x-admin') || '';
-    const who = { owner: await sha256(token), ip, admin: !!adminKey && (await sha256(adminKey)) === ADMIN_HASH };
+    let admin = false;
+    if (adminKey) {
+      if (adminBlocked(ip)) return fail('blocked', 429);
+      admin = (await sha256(adminKey)) === ADMIN_HASH;
+      if (!admin) adminFailed(ip);
+    }
+    const who = { owner: await sha256(token), ip, admin };
     const board = env.BOARD.get(env.BOARD.idFromName('8b'));
     const path = url.pathname, q = url.searchParams;
     const reply = r => (r.error ? fail(r.error, r.error === 'taken' ? 409 : r.error === 'slow' ? 429 : r.error === 'admin' ? 403 : 400) : json(r));
@@ -369,6 +436,7 @@ export default {
         return json({ history: await board.hwHistory(date, lesson) });
       }
       if (path === '/api/admin') return json({ admin: who.admin });
+      if (path === '/api/admin/log') return who.admin ? json({ log: await board.adminLog() }) : fail('admin', 403);
       // старі адреси для сторінок, що ще не оновились
       if (path === '/api/days') {
         const dates = (q.get('dates') || '').split(',').filter(d => DATE.test(d)).slice(0, 10);
@@ -402,6 +470,14 @@ export default {
         if (!releasable(date)) return fail('date');
         if (!slots) return fail('seat');
         return act('release', { date, slots });
+      }
+      case '/api/admin/book': {
+        const seat = String(body.seat || ''), slots = slotList(body.slots);
+        // староста може бронювати й на сьогодні, але не далі ніж на два тижні
+        if (!releasable(date) || ms(date) > ms(kyivToday()) + 14 * DAY) return fail('date');
+        if (!SEAT.test(seat) || !slots) return fail('seat');
+        if (name.length < 2) return fail('name');
+        return act('adminBook', { date, slots, seat, name });
       }
       case '/api/admin/release': {
         const seat = String(body.seat || ''), slot = String(body.slot || '');
@@ -443,5 +519,5 @@ export default {
         return act('react', { id: Number(body.id), emoji: body.emoji });
     }
     return fail('not_found', 404);
-  },
-};
+  }
+}
