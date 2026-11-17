@@ -106,15 +106,21 @@ const HELP = `Я бот класу 8-Б.\n\n${COMMANDS.map(([c, d]) => `/${c} �
 
 // ---------- Telegram ----------
 export async function tgSecret(env) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${env.TG_TOKEN}:8b-webhook`));
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${String(env.TG_TOKEN).trim()}:8b-webhook`));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 48);
 }
+// виклик Telegram API; не довше 10 с, помилки мережі повертаються як { ok: false, description }
 async function tg(env, method, body) {
   const base = env.TG_API || 'https://api.telegram.org';
-  const r = await fetch(`${base}/bot${env.TG_TOKEN}/${method}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  });
-  return r.json().catch(() => ({ ok: false, error_code: r.status }));
+  try {
+    const r = await fetch(`${base}/bot${String(env.TG_TOKEN).trim()}/${method}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+    return await r.json().catch(() => ({ ok: false, error_code: r.status, description: `HTTP ${r.status}` }));
+  } catch (e) {
+    return { ok: false, error_code: 0, description: e.name === 'TimeoutError' ? 'Telegram не відповів за 10 с' : String(e.message || e) };
+  }
 }
 const siteButton = { reply_markup: { inline_keyboard: [[{ text: 'Відкрити сайт 8-Б', url: SITE }]] } };
 const send = (env, chat, text, extra = {}) =>
@@ -124,13 +130,27 @@ const send = (env, chat, text, extra = {}) =>
 export async function tgSetup(env, origin) {
   if (!env.TG_TOKEN) return { error: 'no_token' };
   const me = await tg(env, 'getMe', {});
-  if (!me.ok) return { error: 'bad_token' };
+  if (!me.ok) return { error: me.error_code === 401 || me.error_code === 404 ? 'bad_token' : 'unreachable', detail: me.description };
   const hook = await tg(env, 'setWebhook', {
     url: `${origin}/tg`, secret_token: await tgSecret(env), allowed_updates: ['message'], drop_pending_updates: true,
   });
-  if (!hook.ok) return { error: 'webhook' };
+  if (!hook.ok) return { error: 'webhook', detail: hook.description };
   await tg(env, 'setMyCommands', { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
   return { ok: true, username: me.result.username };
+}
+
+// Стан бота для панелі старости: чи є токен, чи відповідає Telegram, куди дивиться вебхук і чи були помилки.
+export async function tgStatus(env, origin) {
+  if (!env.TG_TOKEN) return { token: false };
+  const me = await tg(env, 'getMe', {});
+  if (!me.ok) return { token: true, ok: false, detail: me.description };
+  const info = await tg(env, 'getWebhookInfo', {});
+  const w = info.result || {};
+  return {
+    token: true, ok: true, username: me.result.username,
+    hooked: w.url === `${origin}/tg`, pending: w.pending_update_count || 0,
+    lastError: w.last_error_message || null, lastErrorAt: w.last_error_date ? w.last_error_date * 1000 : null,
+  };
 }
 
 // Повідомлення від Telegram

@@ -22,6 +22,7 @@
 //                                                        і на сьогодні теж)
 //   GET  /api/admin/log                                  останні дії старости
 //   POST /api/admin/tg-setup                             підключити Telegram-бота (вебхук і меню команд), див. bot.js
+//   GET  /api/admin/tg-status                            стан бота: токен, вебхук, остання помилка Telegram
 //   POST /tg                                             вебхук Telegram (перевіряється секретом)
 //   POST /api/admin/hw-history-clear { date, lesson }
 //
@@ -30,7 +31,7 @@
 // сервер перестає перевіряти коди з неї. Усі дії старости пишуться в журнал.
 // Імена назовні віддаються скорочено: «Нестор Гуцалік» → «Нестор Г.».
 import { DurableObject } from 'cloudflare:workers';
-import { handleTg, tgSetup, tgDaily } from './bot.js';
+import { handleTg, tgSetup, tgStatus, tgDaily } from './bot.js';
 
 const ADMIN_HASH = '4623f62e26392e64161401c7820a182bf8550b0dcf6fb7cd1e57a31cb683aea2';
 // Код помічника: уміє лише бронювати парти для інших (/api/admin/book), більше нічого.
@@ -486,6 +487,7 @@ async function handle(request, env) {
       }
       if (path === '/api/admin') return json({ admin: who.admin, booker: who.booker });
       if (path === '/api/admin/log') return who.admin ? json({ log: await board.adminLog() }) : fail('admin', 403);
+      if (path === '/api/admin/tg-status') return who.admin ? json(await tgStatus(env, url.origin)) : fail('admin', 403);
       // старі адреси для сторінок, що ще не оновились
       if (path === '/api/days') {
         const dates = (q.get('dates') || '').split(',').filter(d => DATE.test(d)).slice(0, 10);
@@ -523,7 +525,7 @@ async function handle(request, env) {
       case '/api/admin/tg-setup': {
         if (!who.admin) return fail('admin', 403);
         const r = await tgSetup(env, url.origin);
-        return r.error ? fail(r.error) : json(r);
+        return r.error ? json({ error: r.error, code: r.error, detail: r.detail || null }, 400) : json(r);
       }
       case '/api/admin/book': {
         const seat = String(body.seat || ''), slots = slotList(body.slots);
