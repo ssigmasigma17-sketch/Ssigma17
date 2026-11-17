@@ -279,6 +279,7 @@ main { padding-top: 22px; }
   row-gap: 12px;
   align-items: center;
 }
+.desk-gap { min-height: 1px; }
 .desk-no { font: 600 11px/1 var(--f-mono); color: var(--muted); text-align: center; }
 .row-name { font: 700 10.5px/1 var(--f-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; padding-top: 6px; }
 

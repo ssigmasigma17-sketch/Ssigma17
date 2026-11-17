@@ -212,7 +212,8 @@
   // бронюється вся парта: id «ряд-парта»
   const seatName = id => { const [r, d] = id.split('-'); return { r, d, text: `ряд ${r}, парта ${d}` }; };
   const seatIds = [];
-  for (let r = 1; r <= C.rows; r++) for (let d = 1; d <= C.desks; d++) seatIds.push(`${r}-${d}`);
+  const ROWS = C.layout.length, DEPTH = Math.max(...C.layout);
+  C.layout.forEach((n, i) => { for (let d = 1; d <= n; d++) seatIds.push(`${i + 1}-${d}`); });
   const TOTAL = seatIds.length;
   // старі броні окремих місць («1-2-L») не показуємо
   const cleanDay = day => {
@@ -637,18 +638,20 @@
     }
     $('room').classList.toggle('loading', !lastSync && api === server && $('demo').hidden);
     const rows = $('rows');
-    rows.style.setProperty('--rows', C.rows);
+    rows.style.setProperty('--rows', ROWS);
     rows.textContent = '';
-    for (let d = 1; d <= C.desks; d++) {
+    for (let d = 1; d <= DEPTH; d++) {
       rows.append(h('div', 'desk-no', d));
-      for (let r = 1; r <= C.rows; r++) {
+      for (let r = 1; r <= ROWS; r++) {
+        // у коротшому ряду ззаду порожньо
+        if (d > C.layout[r - 1]) { rows.append(h('div', 'desk-gap')); continue; }
         const desk = h('div', 'desk');
         desk.append(seatButton(`${r}-${d}`, day, favFree && fav === `${r}-${d}`));
         rows.append(desk);
       }
     }
     rows.append(h('div'));
-    for (let r = 1; r <= C.rows; r++) rows.append(h('div', 'row-name', `${r} ряд`));
+    for (let r = 1; r <= ROWS; r++) rows.append(h('div', 'row-name', `${r} ряд`));
     fitNames();
     const sync = $('sync');
     sync.classList.remove('off');
