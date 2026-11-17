@@ -8,6 +8,50 @@
     return el;
   };
 
+  // ---------- Telegram Mini App ----------
+  // Усередині Telegram сайт відкривається як міні-застосунок. Telegram передає параметри в #хеші;
+  // спілкуємося з ним напряму подіями (core.telegram.org/api/web-events), без сторонніх скриптів.
+  const tgParams = new URLSearchParams(location.hash.slice(1));
+  const tgLaunch = tgParams.has('tgWebAppVersion') || tgParams.has('tgWebAppData');
+  const inTg = (() => {
+    try {
+      if (tgLaunch) sessionStorage.setItem('tg', tgParams.get('tgWebAppThemeParams') || '{}');
+      return sessionStorage.getItem('tg') != null || !!window.TelegramWebviewProxy;
+    } catch { return tgLaunch || !!window.TelegramWebviewProxy; }
+  })();
+  const tgTheme = (() => {
+    try { return JSON.parse(tgParams.get('tgWebAppThemeParams') || sessionStorage.getItem('tg') || '{}'); } catch { return {}; }
+  })();
+  function tgPost(eventType, eventData = {}) {
+    if (!inTg) return;
+    try {
+      if (window.TelegramWebviewProxy) window.TelegramWebviewProxy.postEvent(eventType, JSON.stringify(eventData));
+      else if (window.external && 'notify' in window.external) window.external.notify(JSON.stringify({ eventType, eventData }));
+      else if (window.parent !== window) window.parent.postMessage(JSON.stringify({ eventType, eventData }), '*');
+    } catch { /* не в Telegram або стара версія — просто ігноруємо */ }
+  }
+  // темна чи світла тема в Telegram — за яскравістю його фону
+  const tgDark = (() => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(tgTheme.bg_color || '');
+    if (!m) return null;
+    const n = parseInt(m[1], 16), lum = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+    return lum < 128;
+  })();
+  const toHex = rgb => {
+    const m = rgb.match(/\d+/g);
+    return m && m.length >= 3 ? '#' + m.slice(0, 3).map(x => (+x).toString(16).padStart(2, '0')).join('') : null;
+  };
+  function tgColors() {
+    if (!inTg) return;
+    const bg = toHex(getComputedStyle(document.body).backgroundColor);
+    if (!bg) return;
+    tgPost('web_app_set_header_color', { color: bg });
+    tgPost('web_app_set_background_color', { color: bg });
+    tgPost('web_app_set_bottom_bar_color', { color: bg });
+  }
+  const haptic = (kind = 'success') => tgPost('web_app_trigger_haptic_feedback', { type: 'notification', notification_type: kind });
+  if (inTg) document.documentElement.classList.add('in-tg');
+
   // ---------- сховище браузера ----------
   const store = {
     get(k, def = null) { try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch { return def; } },
@@ -910,6 +954,7 @@
       renderDigest();
       const k = r.booked?.length || 1, miss = r.taken?.length || 0;
       const whose = other ? `Заброньовано для ${name}` : 'Парта твоя';
+      haptic();
       toast(k > 1 ? `${whose} на ${k} ${plural(k, 'урок', 'уроки', 'уроків')}${miss ? `; на ${miss} — уже зайнята` : ''}` : `${whose} ${DOW_ON[dowOf(date)]}`);
       return null;
     } catch (err) {
@@ -1592,14 +1637,17 @@
   const THEMES = { auto: 'як у телефоні', light: 'світла', dark: 'темна' };
   function applyTheme(mode) {
     const root = document.documentElement;
-    if (mode === 'auto') delete root.dataset.theme;
-    else root.dataset.theme = mode;
+    // «авто» в Telegram — як тема самого Telegram
+    const eff = mode === 'auto' && inTg && tgDark != null ? (tgDark ? 'dark' : 'light') : mode;
+    if (eff === 'auto') delete root.dataset.theme;
+    else root.dataset.theme = eff;
     $('theme').dataset.mode = mode;
     $('theme').setAttribute('aria-label', `Тема: ${THEMES[mode]}`);
     const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
     for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
-      m.content = mode === 'auto' ? (m.media.includes('dark') ? '#16201c' : '#f5f8fc') : paper;
+      m.content = eff === 'auto' ? (m.media.includes('dark') ? '#16201c' : '#f5f8fc') : paper;
     }
+    requestAnimationFrame(tgColors);
   }
   $('theme').addEventListener('click', () => {
     const keys = Object.keys(THEMES), mode = keys[(keys.indexOf($('theme').dataset.mode) + 1) % keys.length];
@@ -1627,7 +1675,12 @@
   cview = store.get('cview', 'chat');
   showCView(cview);
   if (isAdmin || isBooker) adminUi();
-  showTab(location.hash.slice(1) || store.get('tab', 'desks'));
+  showTab((tgLaunch ? '' : location.hash.slice(1)) || store.get('tab', 'desks'));
+  if (inTg) {
+    tgPost('web_app_setup_swipe_behavior', { allow_vertical_swipe: false }); // щоб прокрутка не згортала застосунок
+    tgPost('web_app_expand');
+    tgPost('web_app_ready');
+  }
   tick();
   setInterval(tick, 1000);
   schedule();
