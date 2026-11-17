@@ -2,9 +2,12 @@
 // Якщо поруч є public/ (binding ASSETS), віддає і сам сайт; інакше лише API для сторінки на GitHub Pages.
 //
 //   GET  /api/sync?dates=…&from=…&to=…&chat=<останній id>&rev=<версія чату>
+//        days: { [date]: { slots: { [урок]: { seats: { "2-4": { name } }, mine } } } }
+//        Урок (slot) — номер уроку, для поділу на групи ще й група: "3", "4.1", "4.2".
 //        → { days, hw, polls, chat: { rev, full, msgs } } — усе, що сторінка оновлює раз на кілька секунд
-//   POST /api/book          { date, seat, name }        409 { code: 'taken' }; 400 { code: 'date' } — не напередодні
-//   POST /api/release       { date }
+//   POST /api/book          { date, slots, seat, name }  бронює ту саму парту на кожен урок зі slots, де вона вільна;
+//                                                        409 { code: 'taken' }, якщо зайнята на всіх; 400 { code: 'date' } — не напередодні
+//   POST /api/release       { date, slots }              звільнити свою парту на цих уроках
 //   POST /api/hw            { date, lesson, text, name } порожній text стирає запис
 //   GET  /api/hw/history?date=…&lesson=…              попередні версії, новіші першими
 //   POST /api/polls         { q, options, name }
@@ -14,7 +17,7 @@
 //   POST /api/chat/delete   { id }                       автор або староста
 //   POST /api/chat/react    { id, emoji }                поставити / зняти реакцію (👍 😂 ❤️ 🔥)
 //   GET  /api/admin                                      { admin } — чи правильний код старости
-//   POST /api/admin/release { date, seat }               староста знімає будь-яку бронь
+//   POST /api/admin/release { date, slot, seat }         староста знімає будь-яку бронь
 //   POST /api/admin/hw-history-clear { date, lesson }
 //
 // Хто є хто — випадковий токен пристрою в заголовку x-token; у базі лежить лише його SHA-256.
@@ -23,9 +26,10 @@
 import { DurableObject } from 'cloudflare:workers';
 
 const ADMIN_HASH = 'a3f2a5c657e26bb0a9ecf957112c2c519b46f4b3b6d620da46a07e4b32a4bffc';
-// скільки парт у кожному ряду (1, 2, 3 ряд); бронюється вся парта: «ряд-парта»
-const LAYOUT = [6, 5, 6];
-const SEAT = { test: id => { const m = /^(\d)-(\d)$/.exec(id); return !!m && +m[2] >= 1 && +m[2] <= (LAYOUT[+m[1] - 1] || 0); } };
+// Парта — «ряд-парта». У різних кабінетах різна кількість рядів і парт, точний план знає сторінка,
+// сервер лише не пускає неможливе: до 4 рядів, до 6 парт у ряду.
+const SEAT = /^[1-4]-[1-6]$/;
+const SLOT = /^(1[0-2]|[1-9])(\.[12])?$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY = 864e5;
 const POLL_DAYS = 14;        // опитування видно 2 тижні
@@ -53,6 +57,12 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS },
 });
 const fail = (code, status = 400) => json({ error: code, code }, status);
+// список уроків: 1–16 рядків на зразок "3" або "4.2", без повторів; null — якщо щось не так
+const slotList = v => {
+  if (!Array.isArray(v) || !v.length || v.length > 16) return null;
+  const list = [...new Set(v.map(String))];
+  return list.every(x => SLOT.test(x)) ? list : null;
+};
 const clean = (v, max) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
 const shortName = name => { const [a, b] = String(name).split(' '); return b ? `${a} ${b[0]}.` : a; };
 
@@ -105,8 +115,10 @@ export class Board extends DurableObject {
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)');
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reactions (
       msg INTEGER NOT NULL, owner TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (msg, owner, emoji))`);
-    // колись бронювали окремі місця («1-2-L»); тепер — цілі парти
-    this.sql.exec("DELETE FROM bookings WHERE seat LIKE '%-L' OR seat LIKE '%-R'");
+    // броні по уроках: на кожен урок своя парта
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS desk_bookings (
+      date TEXT NOT NULL, slot TEXT NOT NULL, seat TEXT NOT NULL, name TEXT NOT NULL, owner TEXT NOT NULL, created INTEGER NOT NULL,
+      PRIMARY KEY (date, slot, seat), UNIQUE (date, slot, owner))`);
     this.hits = new Map();
     this.ipOwners = new Map();
   }
@@ -147,13 +159,13 @@ export class Board extends DurableObject {
   }
 
   day(date, owner) {
-    const seats = {};
-    let mine = null;
-    for (const r of this.sql.exec('SELECT seat, name, owner FROM bookings WHERE date = ?', date)) {
-      seats[r.seat] = { name: shortName(r.name) };
-      if (r.owner === owner) mine = r.seat;
+    const slots = {};
+    for (const r of this.sql.exec('SELECT slot, seat, name, owner FROM desk_bookings WHERE date = ?', date)) {
+      const s = (slots[r.slot] ||= { seats: {}, mine: null });
+      s.seats[r.seat] = { name: shortName(r.name) };
+      if (r.owner === owner) s.mine = r.seat;
     }
-    return { seats, mine };
+    return { slots };
   }
 
   hw(from, to) {
@@ -213,20 +225,26 @@ export class Board extends DurableObject {
     const owner = who.owner;
     switch (action) {
       case 'book': {
-        const cur = this.sql.exec('SELECT owner FROM bookings WHERE date = ? AND seat = ?', a.date, a.seat).toArray()[0];
-        if (cur && cur.owner !== owner) return { error: 'taken' };
-        // одна парта на людину на день: стара звільняється
-        this.sql.exec('DELETE FROM bookings WHERE date = ? AND owner = ?', a.date, owner);
-        this.sql.exec('INSERT INTO bookings (date, seat, name, owner, created) VALUES (?, ?, ?, ?, ?)', a.date, a.seat, a.name, owner, Date.now());
+        // на кожен урок — одна парта на людину; якщо на якомусь уроці парта зайнята, його пропускаємо
+        const booked = [], taken = [];
+        for (const slot of a.slots) {
+          const cur = this.sql.exec('SELECT owner FROM desk_bookings WHERE date = ? AND slot = ? AND seat = ?', a.date, slot, a.seat).toArray()[0];
+          if (cur && cur.owner !== owner) { taken.push(slot); continue; }
+          this.sql.exec('DELETE FROM desk_bookings WHERE date = ? AND slot = ? AND owner = ?', a.date, slot, owner);
+          this.sql.exec('INSERT INTO desk_bookings (date, slot, seat, name, owner, created) VALUES (?, ?, ?, ?, ?, ?)',
+            a.date, slot, a.seat, a.name, owner, Date.now());
+          booked.push(slot);
+        }
+        if (!booked.length) return { error: 'taken' };
         this.cleanup();
-        return { day: this.day(a.date, owner) };
+        return { day: this.day(a.date, owner), booked, taken };
       }
       case 'release':
-        this.sql.exec('DELETE FROM bookings WHERE date = ? AND owner = ?', a.date, owner);
+        for (const slot of a.slots) this.sql.exec('DELETE FROM desk_bookings WHERE date = ? AND slot = ? AND owner = ?', a.date, slot, owner);
         return { day: this.day(a.date, owner) };
       case 'adminRelease':
         if (!who.admin) return { error: 'admin' };
-        this.sql.exec('DELETE FROM bookings WHERE date = ? AND seat = ?', a.date, a.seat);
+        this.sql.exec('DELETE FROM desk_bookings WHERE date = ? AND slot = ? AND seat = ?', a.date, a.slot, a.seat);
         return { day: this.day(a.date, owner) };
       case 'hw': {
         // попередня версія йде в історію, щоб зіпсований запис можна було повернути
@@ -301,6 +319,7 @@ export class Board extends DurableObject {
 
   cleanup() {
     const old = new Date(Date.now() - 60 * DAY).toISOString().slice(0, 10);
+    this.sql.exec('DELETE FROM desk_bookings WHERE date < ?', old);
     this.sql.exec('DELETE FROM bookings WHERE date < ?', old);
     this.sql.exec('DELETE FROM homework WHERE date < ?', old);
     this.sql.exec('DELETE FROM homework_history WHERE date < ?', old);
@@ -372,19 +391,22 @@ export default {
 
     switch (path) {
       case '/api/book': {
-        const seat = String(body.seat || '');
+        const seat = String(body.seat || ''), slots = slotList(body.slots);
         if (!bookable(date)) return fail('date');
-        if (!SEAT.test(seat)) return fail('seat');
+        if (!SEAT.test(seat) || !slots) return fail('seat');
         if (name.length < 2) return fail('name');
-        return act('book', { date, seat, name });
+        return act('book', { date, slots, seat, name });
       }
-      case '/api/release':
+      case '/api/release': {
+        const slots = slotList(body.slots);
         if (!releasable(date)) return fail('date');
-        return act('release', { date });
+        if (!slots) return fail('seat');
+        return act('release', { date, slots });
+      }
       case '/api/admin/release': {
-        const seat = String(body.seat || '');
-        if (!DATE.test(date) || !SEAT.test(seat)) return fail('seat');
-        return act('adminRelease', { date, seat });
+        const seat = String(body.seat || ''), slot = String(body.slot || '');
+        if (!DATE.test(date) || !SEAT.test(seat) || !SLOT.test(slot)) return fail('seat');
+        return act('adminRelease', { date, slot, seat });
       }
       case '/api/hw': {
         const lesson = Number(body.lesson);
