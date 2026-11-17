@@ -282,6 +282,7 @@
     adminRelease: (date, slot, seat) => server.req('/api/admin/release', { date, slot, seat }),
     adminBook: (date, slots, seat, name) => server.req('/api/admin/book', { date, slots, seat, name }),
     adminLog: () => server.req('/api/admin/log'),
+    tgSetup: () => server.req('/api/admin/tg-setup', {}),
     hwHistoryClear: (date, lesson) => server.req('/api/admin/hw-history-clear', { date, lesson }),
   };
 
@@ -1298,6 +1299,7 @@
     const list = $('admin-log');
     list.textContent = '';
     list.hidden = !isAdmin;
+    $('tg-setup').hidden = !isAdmin;
     if (!isAdmin) return;
     try {
       const { log } = await api.adminLog();
@@ -1322,6 +1324,21 @@
     if (silent !== true) toast('Режим вимкнено');
   }
   $('admin-exit').addEventListener('click', exitAdmin);
+  // Telegram-бот: сервер сам прописує вебхук і меню команд, якщо в Cloudflare є секрет TG_TOKEN
+  $('tg-setup').addEventListener('click', async () => {
+    $('tg-setup').disabled = true;
+    try {
+      const r = await api.tgSetup();
+      $('admin-error').textContent = '';
+      toast(`Бот @${r.username} підключено`);
+    } catch (e) {
+      $('admin-error').textContent = e.code === 'no_token' ? 'Спершу додай секрет TG_TOKEN у Cloudflare.'
+        : e.code === 'bad_token' ? 'Telegram не прийняв токен. Перевір TG_TOKEN у Cloudflare.'
+        : 'Не вдалося підключити бота. Спробуй ще раз.';
+    } finally {
+      $('tg-setup').disabled = false;
+    }
+  });
   $('admin-close').addEventListener('click', () => closeSheet());
   $('admin-cancel').addEventListener('click', () => closeSheet());
   $('admin-form').addEventListener('submit', async e => {
