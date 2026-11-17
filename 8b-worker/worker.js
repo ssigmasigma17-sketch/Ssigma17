@@ -23,9 +23,9 @@
 import { DurableObject } from 'cloudflare:workers';
 
 const ADMIN_HASH = 'a3f2a5c657e26bb0a9ecf957112c2c519b46f4b3b6d620da46a07e4b32a4bffc';
-const ROWS = 3, DESKS = 5;
-// бронюється вся парта: «ряд-парта»
-const SEAT = new RegExp(`^[1-${ROWS}]-[1-${DESKS}]$`);
+// скільки парт у кожному ряду (1, 2, 3 ряд); бронюється вся парта: «ряд-парта»
+const LAYOUT = [6, 5, 6];
+const SEAT = { test: id => { const m = /^(\d)-(\d)$/.exec(id); return !!m && +m[2] >= 1 && +m[2] <= (LAYOUT[+m[1] - 1] || 0); } };
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY = 864e5;
 const POLL_DAYS = 14;        // опитування видно 2 тижні
