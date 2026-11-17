@@ -8,17 +8,6 @@ const SITE = 'https://ssigmasigma17-sketch.github.io/Ssigma17/8b/';
 const SCHEDULE_URL = SITE + 'schedule.json';
 const MAX_CHATS = 30;
 
-const COMMANDS = [
-  ['now', 'Що зараз і скільки до дзвінка'],
-  ['today', 'Уроки сьогодні'],
-  ['tomorrow', 'Уроки й домашка на завтра'],
-  ['hw', 'Домашка на найближчий день'],
-  ['bells', 'Розклад дзвінків'],
-  ['subscribe', 'Нагадування в цей чат о 7:00 і 19:00'],
-  ['unsubscribe', 'Вимкнути нагадування'],
-  ['help', 'Що вміє бот'],
-];
-
 // ---------- розклад ----------
 let cached = null;
 async function schedule(env) {
@@ -102,7 +91,8 @@ function bellsText(C) {
   return ['<b>Дзвінки</b>', ...C.bells.slice(0, used).map(([a, b], i) => `${i + 1}. ${a}–${b}`)].join('\n');
 }
 
-const HELP = `Я бот класу 8-Б.\n\n${COMMANDS.map(([c, d]) => `/${c} — ${d}`).join('\n')}\n\nПарти, домашка й чат — на сайті.`;
+// Без списку команд: лише привітання й кнопка «Відкрити 8-Б» (команди працюють, якщо їх написати)
+const HELP = 'Розклад, парти, домашка й чат 8-Б — тут 👇';
 
 // ---------- Telegram ----------
 export async function tgSecret(env) {
