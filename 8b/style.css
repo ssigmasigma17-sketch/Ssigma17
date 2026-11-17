@@ -544,8 +544,15 @@ main { padding-top: 22px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 /* староста */
-.foot .admin-link { padding: 0; font-size: 12.5px; font-weight: 400; color: var(--muted); }
-.is-admin .foot .admin-link { color: var(--red); font-weight: 600; }
+.klass { user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+/* режим старости видно лише по синій рисці в «8-Б» */
+.is-admin .klass .dash { color: var(--ink); }
+.for-other { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; color: var(--ink); }
+.for-other input { width: 20px; height: 20px; accent-color: var(--ink); }
+.admin-log { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; max-height: 40vh; overflow-y: auto; font-size: 14px; }
+.admin-log li { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.admin-log b { font-weight: 600; }
+.admin-log time { font-size: 12px; color: var(--muted); }
 
 /* ---------- дзвінки ---------- */
 .bells { list-style: none; margin: 0; padding: 0; max-width: 620px; display: grid; }

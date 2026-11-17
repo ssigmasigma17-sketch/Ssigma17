@@ -280,6 +280,8 @@
     react: (id, emoji) => server.req('/api/chat/react', { id, emoji }),
     adminCheck: () => server.req('/api/admin'),
     adminRelease: (date, slot, seat) => server.req('/api/admin/release', { date, slot, seat }),
+    adminBook: (date, slots, seat, name) => server.req('/api/admin/book', { date, slots, seat, name }),
+    adminLog: () => server.req('/api/admin/log'),
     hwHistoryClear: (date, lesson) => server.req('/api/admin/hw-history-clear', { date, lesson }),
   };
 
@@ -765,7 +767,7 @@
   function onSeat(id) {
     const day = slotData(selDate, selSlot), who = day.seats[id];
     if (who && day.mine !== id) return isAdmin ? openAdminSeat(id, who) : toast(`${who.name} · ${seatName(id).text}`);
-    if (!who && !bookable(selDate)) return toast('Бронювати можна лише напередодні');
+    if (!who && !bookable(selDate) && !isAdmin) return toast('Бронювати можна лише напередодні');
     openSheet(id);
   }
 
@@ -806,7 +808,11 @@
       $('sheet-submit').textContent = all.length < 2 ? (was ? 'Пересісти сюди' : 'Забронювати парту') : 'Лише на цей урок';
       $('sheet-submit').classList.toggle('primary', all.length < 2);
       $('sheet-submit').classList.toggle('ghost', all.length >= 2);
-      $('name-input').value = store.get('name', '');
+      // староста може бронювати для інших, а на закритий день — лише так
+      $('for-other-row').hidden = !isAdmin;
+      $('for-other').checked = isAdmin && !bookable(selDate);
+      $('for-other').disabled = isAdmin && !bookable(selDate);
+      forOther();
     }
     $('scrim').hidden = false;
     $('sheet').hidden = false;
@@ -848,17 +854,25 @@
     hwOpen = null;
   }
 
+  const isForOther = () => isAdmin && $('for-other').checked;
+  function forOther() {
+    const other = isForOther();
+    $('name-label').textContent = other ? 'Для кого' : 'Імʼя та прізвище';
+    $('name-input').placeholder = other ? 'Імʼя того, кому бронюєш' : 'Як тебе підписати на парті';
+    $('name-input').value = other ? '' : store.get('name', '');
+  }
+  $('for-other').addEventListener('change', forOther);
   function sheetName() {
     const name = $('name-input').value.trim().replace(/\s+/g, ' ');
     if (name.length < 2) { $('sheet-error').textContent = 'Напиши імʼя, щоб усі бачили, чия це парта.'; return null; }
-    store.set('name', name);
+    if (!isForOther()) store.set('name', name);
     return name;
   }
   async function submitBooking(slots, btn) {
     const name = sheetName();
     if (!name) return;
     btn.disabled = true;
-    const err = await bookSeat(sheetSeat, selDate, slots, name);
+    const err = await bookSeat(sheetSeat, selDate, slots, name, isForOther());
     btn.disabled = false;
     if (err) $('sheet-error').textContent = err;
   }
@@ -869,12 +883,12 @@
   $('sheet-all').addEventListener('click', () => submitBooking(sameRoomSlots(sheetSeat).map(sl => sl.id), $('sheet-all')));
 
   // повертає текст помилки або null
-  async function bookSeat(seat, date, slots, name) {
+  async function bookSeat(seat, date, slots, name, other = false) {
     try {
-      const r = await api.book(date, slots, seat, name);
+      const r = await (other ? api.adminBook(date, slots, seat, name) : api.book(date, slots, seat, name));
       data[date] = cleanDay(r.day, date);
       const sl = slotOf(date, selSlot);
-      if (sl) store.set('favs', { ...(store.get('favs', {}) || {}), [sl.layout.join('-')]: seat });
+      if (sl && !other) store.set('favs', { ...(store.get('favs', {}) || {}), [sl.layout.join('-')]: seat });
       popSeat = seat;
       buzz([12, 50, 18]);
       closeSheet();
@@ -882,7 +896,8 @@
       renderRoom();
       renderDigest();
       const k = r.booked?.length || 1, miss = r.taken?.length || 0;
-      toast(k > 1 ? `Парта твоя на ${k} ${plural(k, 'урок', 'уроки', 'уроків')}${miss ? `; на ${miss} — уже зайнята` : ''}` : `Парта твоя ${DOW_ON[dowOf(date)]}`);
+      const whose = other ? `Заброньовано для ${name}` : 'Парта твоя';
+      toast(k > 1 ? `${whose} на ${k} ${plural(k, 'урок', 'уроки', 'уроків')}${miss ? `; на ${miss} — уже зайнята` : ''}` : `${whose} ${DOW_ON[dowOf(date)]}`);
       return null;
     } catch (err) {
       if (err.code === 'taken') refresh();
@@ -1248,38 +1263,67 @@
   });
 
   // ---------- староста ----------
+  // Вхід прихований: 5 швидких торкань по «8-Б». У режимі старости риска в «8-Б» стає синьою — помітно лише тому, хто знає.
   function adminUi() {
-    $('admin-link').textContent = isAdmin ? 'Режим старости · вийти' : 'Староста';
     document.documentElement.classList.toggle('is-admin', isAdmin);
     pollsKey = '';
     renderPolls();
     renderChat();
+    renderRoom();
   }
-  $('admin-link').addEventListener('click', () => {
-    if (isAdmin) {
-      isAdmin = false;
-      adminKey = null;
-      store.set('admin', null);
-      adminUi();
-      return toast('Режим старости вимкнено');
-    }
-    $('admin-code').value = '';
+  let taps = [];
+  $('klass').addEventListener('click', () => {
+    const now = Date.now();
+    taps = taps.filter(t => now - t < 2500).concat(now);
+    if (taps.length >= 5) { taps = []; openAdmin(); }
+  });
+  async function openAdmin() {
     $('admin-error').textContent = '';
+    $('admin-form').hidden = isAdmin;
+    $('admin-on').hidden = !isAdmin;
+    $('admin-title').textContent = isAdmin ? 'Режим старости' : 'Код старости';
+    $('admin-text').textContent = isAdmin
+      ? 'Можна бронювати парти для інших (і на сьогодні), знімати будь-які броні, видаляти опитування й повідомлення. Останні дії:'
+      : 'Староста може бронювати парти для інших, знімати будь-які броні, видаляти опитування й повідомлення.';
+    $('admin-code').value = '';
     $('scrim').hidden = false;
     $('admin-sheet').hidden = false;
-    setTimeout(() => $('admin-code').focus(), 250);
-  });
+    if (!isAdmin) return setTimeout(() => $('admin-code').focus(), 250);
+    const list = $('admin-log');
+    list.textContent = '';
+    try {
+      const { log } = await api.adminLog();
+      if (!log.length) list.append(h('li', 'muted', 'Поки нічого.'));
+      for (const e of log) {
+        const li = h('li');
+        li.append(h('b', '', e.action), h('span', '', ` ${e.detail}`), h('time', '', ago(e.at)));
+        list.append(li);
+      }
+    } catch {
+      list.append(h('li', 'muted', 'Не вдалося завантажити журнал.'));
+    }
+  }
+  function exitAdmin(silent) {
+    isAdmin = false;
+    adminKey = null;
+    store.set('admin', null);
+    closeSheet();
+    adminUi();
+    if (silent !== true) toast('Режим старости вимкнено');
+  }
+  $('admin-exit').addEventListener('click', exitAdmin);
+  $('admin-close').addEventListener('click', () => closeSheet());
   $('admin-cancel').addEventListener('click', () => closeSheet());
   $('admin-form').addEventListener('submit', async e => {
     e.preventDefault();
     const key = $('admin-code').value.trim().toUpperCase();
     if (!key) return;
     adminKey = key;
-    let ok = false;
-    try { ({ admin: ok } = await api.adminCheck()); } catch {}
+    let ok = false, blocked = false;
+    try { ({ admin: ok } = await api.adminCheck()); } catch (err) { blocked = err.code === 'blocked'; }
     if (!ok) {
       adminKey = null;
-      $('admin-error').textContent = 'Код не підходить.';
+      $('admin-error').textContent = blocked ? 'Забагато спроб. Спробуй через 15 хвилин.' : 'Код не підходить.';
       return;
     }
     isAdmin = true;
@@ -1288,6 +1332,8 @@
     adminUi();
     toast('Режим старости увімкнено');
   });
+  // код змінився або став недійсним — тихо виходимо
+  if (isAdmin) api.adminCheck().then(r => { if (!r.admin) exitAdmin(true); }).catch(() => {});
 
   // ---------- оновлення ----------
   // Частота: чат відкритий — 4 с, звичайно — 10 с, без дій понад 5 хв або вкладка прихована — 60 с.

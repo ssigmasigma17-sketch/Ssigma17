@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://class-8b.ponapon309.workers.dev; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>8-Б</title>
 <meta name="description" content="Бронювання парт, розклад уроків і дзвінків, домашка й опитування 8-Б">
 <meta property="og:type" content="website">
@@ -31,7 +33,7 @@
 
 <header class="hero">
   <div class="hero-top">
-    <h1 class="klass" aria-label="Клас 8-Б"><span class="ch">8</span><span class="dash">-</span><span class="ch">Б</span></h1>
+    <h1 class="klass" id="klass" aria-label="Клас 8-Б"><span class="ch">8</span><span class="dash">-</span><span class="ch">Б</span></h1>
     <div class="hero-date">
       <div class="tools">
         <button type="button" class="icon-btn" id="share" aria-label="Поділитися посиланням">
@@ -190,7 +192,6 @@
 <footer class="foot">
   <span>8-Б · <span id="year"></span></span>
   <span>Розклад з rozklad.org, станом на 31.08.2026</span>
-  <button type="button" class="link-btn admin-link" id="admin-link">Староста</button>
 </footer>
 
 </div>
@@ -203,8 +204,12 @@
   <h3 class="sheet-title" id="sheet-title"></h3>
   <p class="sheet-text" id="sheet-text"></p>
   <form id="sheet-form" autocomplete="off">
+    <label class="for-other" id="for-other-row" hidden>
+      <input type="checkbox" id="for-other">
+      <span>Для іншої людини</span>
+    </label>
     <label class="field" for="name-input">
-      <span>Імʼя та прізвище</span>
+      <span id="name-label">Імʼя та прізвище</span>
       <input id="name-input" name="name" maxlength="32" placeholder="Як тебе підписати на парті" required>
     </label>
     <button type="button" class="btn primary btn-wide" id="sheet-all" hidden></button>
@@ -297,6 +302,13 @@
       <button type="submit" class="btn primary" id="admin-save">Увійти</button>
     </div>
   </form>
+  <div id="admin-on" hidden>
+    <ol class="admin-log" id="admin-log"></ol>
+    <div class="sheet-actions">
+      <button type="button" class="btn ghost" id="admin-close">Закрити</button>
+      <button type="button" class="btn danger" id="admin-exit">Вийти</button>
+    </div>
+  </div>
   <p class="sheet-error" id="admin-error" role="alert"></p>
 </div>
 
