@@ -134,6 +134,33 @@ export class Board extends DurableObject {
       PRIMARY KEY (date, slot, seat), UNIQUE (date, slot, owner))`);
     this.hits = new Map();
     this.ipOwners = new Map();
+    try { this.migrate(); } catch (e) { console.error('migrate', e); } // збій міграції не має ламати сервер
+  }
+
+  // Одноразові зміни даних; кожна виконується один раз (позначка в meta).
+  migrate() {
+    const done = key => this.sql.exec('SELECT 1 FROM meta WHERE key = ?', key).toArray().length > 0;
+    const mark = key => this.sql.exec('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', key, Date.now());
+    // 25.11.2026: групи 1 і 2 були переплутані в розкладі. Броні на англійську (обидві групи) скидаємо,
+    // броні на інформатику переносимо в іншу групу — люди лишаються в тому ж кабінеті за тією ж партою.
+    if (!done('groups-swap-2026-11')) {
+      const today = kyivToday();
+      // день тижня в SQLite: 1 — понеділок … 5 — пʼятниця; номери уроків англійської з розкладу
+      const engWhere = `date >= ? AND (
+          (strftime('%w', date) = '1' AND slot IN ('5.1', '5.2')) OR
+          (strftime('%w', date) = '2' AND slot IN ('4.1', '4.2')) OR
+          (strftime('%w', date) = '4' AND slot IN ('3.1', '3.2', '4.1', '4.2')) OR
+          (strftime('%w', date) = '5' AND slot IN ('4.1', '4.2')))`;
+      const eng = this.sql.exec(`SELECT COUNT(*) AS n FROM desk_bookings WHERE ${engWhere}`, today).one().n;
+      this.sql.exec(`DELETE FROM desk_bookings WHERE ${engWhere}`, today);
+      const inf = `date >= ? AND strftime('%w', date) IN ('1', '5') AND slot IN ('7.1', '7.2')`;
+      const swapped = this.sql.exec(`SELECT COUNT(*) AS n FROM desk_bookings WHERE ${inf}`, today).one().n;
+      this.sql.exec(`UPDATE desk_bookings SET slot = CASE slot WHEN '7.1' THEN '7.x' ELSE '7.y' END WHERE ${inf}`, today);
+      this.sql.exec(`UPDATE desk_bookings SET slot = CASE slot WHEN '7.x' THEN '7.2' ELSE '7.1' END
+        WHERE date >= ? AND slot IN ('7.x', '7.y')`, today);
+      this.log('групи', `групи 1 і 2 поміняно місцями; скинуто бронь на англійську: ${eng}; перенесено на інформатику: ${swapped}`);
+      mark('groups-swap-2026-11');
+    }
   }
 
   // ---------- обмеження частоти ----------
