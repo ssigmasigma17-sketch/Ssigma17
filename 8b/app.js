@@ -829,11 +829,21 @@
   }
 
   // інші уроки цього дня в тому самому кабінеті, де ця парта вільна або вже твоя
+  // Уроки цього дня в тому ж кабінеті, де ця парта вільна (або вже твоя): бронюються одним натиском.
+  // Групові уроки — лише своєї групи (якщо відкрито груповий урок), щоб не займати парту в чужій групі.
   function sameRoomSlots(seat) {
     const cur = slotOf(selDate, selSlot);
     return slotsOf(selDate).filter(sl => sl.room === cur.room && sl.layout.join() === cur.layout.join() &&
+      (!sl.group || sl.group === cur.group) &&
       (!slotData(selDate, sl.id).seats[seat] || slotData(selDate, sl.id).mine === seat));
   }
+  // твої уроки цього дня з цією партою в цьому кабінеті — звільняються разом
+  function myRoomSlots(seat) {
+    const cur = slotOf(selDate, selSlot);
+    return slotsOf(selDate).filter(sl => sl.room === cur.room && sl.layout.join() === cur.layout.join() &&
+      slotData(selDate, sl.id).mine === seat);
+  }
+  const lessonsWord = n => `${n} ${plural(n, 'урок', 'уроки', 'уроків')}`;
 
   // ---------- аркуш ----------
   let sheetSeat = null;
@@ -849,22 +859,22 @@
     $('sheet-admin').hidden = true;
     $('sheet-release-all').hidden = true;
     if (mine) {
-      const k = myCount(selDate);
-      $('sheet-text').innerHTML = 'Це твоя парта на цьому уроці. Звільни її, якщо не прийдеш або хочеш пересісти.';
-      $('sheet-release').textContent = 'Звільнити цей урок';
-      $('sheet-release-all').hidden = k < 2;
+      const k = myCount(selDate), here = myRoomSlots(id).length;
+      $('sheet-text').innerHTML = here > 1
+        ? `Це твоя парта в каб. ${sl.room} на ${lessonsWord(here)}. Звільни її, якщо не прийдеш або хочеш пересісти.`
+        : 'Це твоя парта на цьому уроці. Звільни її, якщо не прийдеш або хочеш пересісти.';
+      $('sheet-release').textContent = here > 1 ? `Звільнити в каб. ${sl.room} · ${lessonsWord(here)}` : 'Звільнити парту';
+      $('sheet-release-all').hidden = k <= here;
       $('sheet-release-all').textContent = `Звільнити всі ${k} ${plural(k, 'урок', 'уроки', 'уроків')} цього дня`;
     } else {
       const was = day.mine ? seatName(day.mine) : null;
       const all = sameRoomSlots(id);
-      $('sheet-text').innerHTML = was
-        ? `На цьому уроці твоя парта зараз — ряд ${was.r}, парта ${was.d}. Вона звільниться.`
-        : `${sl.subj}, каб. ${sl.room}.`;
-      $('sheet-all').hidden = all.length < 2;
-      $('sheet-all').textContent = `На всі уроки в каб. ${sl.room} · ${all.length}`;
-      $('sheet-submit').textContent = all.length < 2 ? (was ? 'Пересісти сюди' : 'Забронювати парту') : 'Лише на цей урок';
-      $('sheet-submit').classList.toggle('primary', all.length < 2);
-      $('sheet-submit').classList.toggle('ghost', all.length >= 2);
+      // одна бронь — одразу на всі уроки цього дня в цьому кабінеті
+      const subjs = [...new Set(all.map(x => SHORT[x.subj] || x.subj))].join(', ');
+      $('sheet-text').innerHTML = all.length > 1
+        ? `Каб. ${sl.room}: парта буде твоя на ${lessonsWord(all.length)} — ${all.map(x => x.n + 1).join(', ')} (${subjs}).${was ? ` Попередня парта звільниться.` : ''}`
+        : was ? `На цьому уроці твоя парта зараз — ряд ${was.r}, парта ${was.d}. Вона звільниться.` : `${sl.subj}, каб. ${sl.room}.`;
+      $('sheet-submit').textContent = was ? 'Пересісти сюди' : 'Забронювати парту';
       // староста може бронювати для інших, а на закритий день — лише так
       $('for-other-row').hidden = !canBookOthers();
       $('for-other').checked = canBookOthers() && !bookable(selDate);
@@ -935,9 +945,9 @@
   }
   $('sheet-form').addEventListener('submit', e => {
     e.preventDefault();
-    submitBooking([selSlot], $('sheet-submit'));
+    const ids = sameRoomSlots(sheetSeat).map(sl => sl.id);
+    submitBooking(ids.length ? ids : [selSlot], $('sheet-submit'));
   });
-  $('sheet-all').addEventListener('click', () => submitBooking(sameRoomSlots(sheetSeat).map(sl => sl.id), $('sheet-all')));
 
   // повертає текст помилки або null
   async function bookSeat(seat, date, slots, name, other = false) {
@@ -992,7 +1002,10 @@
       btn.disabled = false;
     }
   }
-  $('sheet-release').addEventListener('click', () => release([selSlot], $('sheet-release')));
+  $('sheet-release').addEventListener('click', () => {
+    const ids = myRoomSlots(sheetSeat).map(sl => sl.id);
+    release(ids.length ? ids : [selSlot], $('sheet-release'));
+  });
   $('sheet-release-all').addEventListener('click', () =>
     release(slotsOf(selDate).filter(sl => slotData(selDate, sl.id).mine).map(sl => sl.id), $('sheet-release-all')));
   for (const id of ['sheet-cancel', 'sheet-close', 'scrim']) $(id).addEventListener('click', closeSheet);
